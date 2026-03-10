@@ -4,11 +4,17 @@ import { contentBlocks, auditResults } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { auditContentBlock } from "@/lib/ai/audit-chain";
 import { randomUUID } from "crypto";
+import { requireAuth, requireContentBlockOwnership } from "@/lib/auth";
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { user, error: authError } = await requireAuth();
+  if (authError) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const { id: contentBlockId } = await params;
 
@@ -22,6 +28,11 @@ export async function POST(
         { error: "Content block not found" },
         { status: 404 }
       );
+    }
+
+    const owns = await requireContentBlockOwnership(contentBlockId, user.id);
+    if (!owns) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const { passed, feedback } = await auditContentBlock(block.content);

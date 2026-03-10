@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import { SyllabusTree } from "@/components/SyllabusTree";
 import { QAHistoryPanel } from "@/components/QAHistoryPanel";
@@ -24,12 +24,10 @@ type Syllabus = {
 
 export default function SyllabusPage() {
   const params = useParams();
-  const router = useRouter();
   const id = params.id as string;
   const [syllabus, setSyllabus] = useState<Syllabus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
   const [showQAHistory, setShowQAHistory] = useState(false);
 
   useEffect(() => {
@@ -38,9 +36,9 @@ export default function SyllabusPage() {
 
   async function fetchSyllabus() {
     try {
-      const res = await fetch(`/api/subjects/${id}/syllabus`);
+      const res = await fetch(`/api/syllabi/${id}`);
       if (res.status === 404) {
-        setError("Subject not found");
+        setError("Syllabus not found");
         setSyllabus(null);
         return;
       }
@@ -53,26 +51,6 @@ export default function SyllabusPage() {
       setSyllabus(null);
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function generateSyllabus() {
-    setGenerating(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/subjects/${id}/syllabus`, {
-        method: "POST",
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to generate syllabus");
-      }
-      const data = await res.json();
-      setSyllabus(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setGenerating(false);
     }
   }
 
@@ -110,19 +88,13 @@ export default function SyllabusPage() {
 
         {!syllabus ? (
           <div className="text-center py-12">
-            <p className="text-slate-400 mb-6">
-              No syllabus yet. Generate one with AI.
-            </p>
-            <button
-              onClick={generateSyllabus}
-              disabled={generating}
-              className="px-6 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 font-medium"
+            <p className="text-slate-400 mb-6">Syllabus not found.</p>
+            <Link
+              href="/"
+              className="text-emerald-400 hover:text-emerald-300 underline"
             >
-              {generating ? "Generating..." : "Generate Syllabus"}
-            </button>
-            {error && !syllabus && (
-              <p className="mt-4 text-red-400 text-sm">{error}</p>
-            )}
+              Back to home
+            </Link>
           </div>
         ) : (
           <>

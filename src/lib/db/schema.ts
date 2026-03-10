@@ -9,12 +9,18 @@ import {
 
 export const subjects = pgTable("subjects", {
   id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .default("00000000-0000-0000-0000-000000000000"),
   name: text("name").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const syllabi = pgTable("syllabi", {
   id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .default("00000000-0000-0000-0000-000000000000"),
   subjectId: text("subject_id")
     .notNull()
     .references(() => subjects.id, { onDelete: "cascade" }),

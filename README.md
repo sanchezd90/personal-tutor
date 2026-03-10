@@ -4,6 +4,9 @@ AI-powered learning app that generates personalized syllabi and delivers lesson 
 
 ## Features
 
+- **Google sign-in** — Multi-user support with data isolation
+- **Resume studies** — Landing page shows your syllabi; pick up where you left off
+- **Multiple syllabi** — Create multiple syllabi per subject
 - **Subject input** — Enter any subject you want to learn
 - **AI-generated syllabus** — Modules and lessons created by AI
 - **Block-by-block content** — Streamed lesson content, one block at a time
@@ -38,12 +41,10 @@ Required variables:
 
 - `DATABASE_URL` — Supabase connection string (Transaction pooler from Project Settings → Database)
 - `OPENAI_API_KEY` — Your OpenAI API key
+- `NEXT_PUBLIC_SUPABASE_URL` — Supabase project URL (for Google Auth)
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Supabase anon key (or `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`)
 
-Optional (for Supabase Auth later):
-
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` — publishable key (sb_publishable_...), safe for client-side
-- `SUPABASE_SECRET_KEY` — secret key (sb_secret_...), server-side only
+To enable Google sign-in: In Supabase Dashboard → Authentication → Providers, enable Google and add your Google OAuth Client ID and Secret from [Google Cloud Console](https://console.cloud.google.com/apis/credentials).
 
 ### 3. Database
 

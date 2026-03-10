@@ -2,11 +2,17 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { lessons, contentBlocks, modules } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { requireAuth, requireLessonOwnership } from "@/lib/auth";
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { user, error: authError } = await requireAuth();
+  if (authError) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const { id: lessonId } = await params;
 
@@ -14,6 +20,11 @@ export async function GET(
 
     if (!lesson) {
       return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
+    }
+
+    const owns = await requireLessonOwnership(lessonId, user.id);
+    if (!owns) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const [mod] = await db

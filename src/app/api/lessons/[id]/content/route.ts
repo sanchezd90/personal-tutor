@@ -4,11 +4,17 @@ import { lessons, contentBlocks } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { streamContentBlock } from "@/lib/ai/content-generator-stream";
 import { randomUUID } from "crypto";
+import { requireAuth, requireLessonOwnership } from "@/lib/auth";
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { user, error: authError } = await requireAuth();
+  if (authError) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const { id: lessonId } = await params;
 
@@ -16,6 +22,11 @@ export async function POST(
 
     if (!lesson) {
       return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
+    }
+
+    const owns = await requireLessonOwnership(lessonId, user.id);
+    if (!owns) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const existingBlocks = await db

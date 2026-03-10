@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { subjects } from "@/lib/db/schema";
-import { generateSyllabus } from "@/lib/ai/syllabus-generator";
-import { syllabi, modules, lessons } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import { requireAuth } from "@/lib/auth";
 
 export async function POST(request: Request) {
+  const { user, error: authError } = await requireAuth();
+  if (authError) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = await request.json();
     const { name } = body;
@@ -21,6 +25,7 @@ export async function POST(request: Request) {
     const id = randomUUID();
     await db.insert(subjects).values({
       id,
+      userId: user.id,
       name: name.trim(),
     });
 
@@ -35,8 +40,17 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
+  const { user, error: authError } = await requireAuth();
+  if (authError) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const allSubjects = await db.select().from(subjects).orderBy(subjects.createdAt);
+    const allSubjects = await db
+      .select()
+      .from(subjects)
+      .where(eq(subjects.userId, user.id))
+      .orderBy(subjects.createdAt);
     return NextResponse.json(allSubjects);
   } catch (error) {
     console.error("Error fetching subjects:", error);

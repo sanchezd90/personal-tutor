@@ -4,11 +4,17 @@ import { contentBlocks, questions, answers } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { generateAnswer } from "@/lib/ai/qa-generator";
 import { randomUUID } from "crypto";
+import { requireAuth, requireContentBlockOwnership } from "@/lib/auth";
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { user, error: authError } = await requireAuth();
+  if (authError) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const { id: contentBlockId } = await params;
     const body = await request.json();
@@ -31,6 +37,11 @@ export async function POST(
         { error: "Content block not found" },
         { status: 404 }
       );
+    }
+
+    const owns = await requireContentBlockOwnership(contentBlockId, user.id);
+    if (!owns) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const answerText = await generateAnswer(block.content, questionText);
@@ -69,8 +80,18 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { user, error: authError } = await requireAuth();
+  if (authError) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const { id: contentBlockId } = await params;
+
+    const owns = await requireContentBlockOwnership(contentBlockId, user.id);
+    if (!owns) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     const qaList = await db
       .select({

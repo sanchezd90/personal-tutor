@@ -1,21 +1,27 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { subjects, syllabi, modules, lessons } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { generateSyllabus } from "@/lib/ai/syllabus-generator";
 import { randomUUID } from "crypto";
+import { requireAuth } from "@/lib/auth";
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { user, error: authError } = await requireAuth();
+  if (authError) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const { id: subjectId } = await params;
 
     const [subject] = await db
       .select()
       .from(subjects)
-      .where(eq(subjects.id, subjectId));
+      .where(and(eq(subjects.id, subjectId), eq(subjects.userId, user.id)));
 
     if (!subject) {
       return NextResponse.json({ error: "Subject not found" }, { status: 404 });
@@ -26,6 +32,7 @@ export async function POST(
     const syllabusId = randomUUID();
     await db.insert(syllabi).values({
       id: syllabusId,
+      userId: user.id,
       subjectId,
       structure: structure as unknown as { modules: Array<{ title: string; lessons: Array<{ title: string }> }> },
     });
@@ -90,13 +97,18 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { user, error: authError } = await requireAuth();
+  if (authError) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const { id: subjectId } = await params;
 
     const [subject] = await db
       .select()
       .from(subjects)
-      .where(eq(subjects.id, subjectId));
+      .where(and(eq(subjects.id, subjectId), eq(subjects.userId, user.id)));
 
     if (!subject) {
       return NextResponse.json({ error: "Subject not found" }, { status: 404 });
@@ -105,7 +117,7 @@ export async function GET(
     const syllabusList = await db
       .select()
       .from(syllabi)
-      .where(eq(syllabi.subjectId, subjectId))
+      .where(and(eq(syllabi.subjectId, subjectId), eq(syllabi.userId, user.id)))
       .orderBy(syllabi.createdAt);
 
     if (syllabusList.length === 0) {

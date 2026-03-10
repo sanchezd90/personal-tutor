@@ -9,13 +9,24 @@ import {
   answers,
 } from "@/lib/db/schema";
 import { eq, inArray } from "drizzle-orm";
+import { requireAuth, requireSyllabusOwnership } from "@/lib/auth";
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { user, error: authError } = await requireAuth();
+  if (authError) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const { id: syllabusId } = await params;
+
+    const owns = await requireSyllabusOwnership(syllabusId, user.id);
+    if (!owns) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     const lessonList = await db
       .select()
