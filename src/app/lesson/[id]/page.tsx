@@ -14,6 +14,7 @@ type Block = {
   content: string;
   status: string;
   deliveredAt: string;
+  auditPassed?: boolean | null;
 };
 
 type Lesson = {
@@ -33,7 +34,6 @@ export default function LessonPage() {
   const [streaming, setStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
-  const [auditResults, setAuditResults] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
 
   const fetchLesson = useCallback(async () => {
@@ -87,19 +87,6 @@ export default function LessonPage() {
     }
   }
 
-  async function handleAudit(blockId: string) {
-    try {
-      const res = await fetch(`/api/content-blocks/${blockId}/audit`, {
-        method: "POST",
-      });
-      if (!res.ok) return;
-      const { passed } = await res.json();
-      setAuditResults((prev) => ({ ...prev, [blockId]: passed }));
-    } catch {
-      // Silent fail
-    }
-  }
-
   if (loading) {
     return (
       <main className="min-h-screen flex items-center justify-center p-8 bg-slate-950 text-slate-100">
@@ -135,7 +122,7 @@ export default function LessonPage() {
             <p className="text-slate-400 text-sm mb-8">{lesson.moduleTitle}</p>
           )}
 
-          {lesson.blocks.map((block) => (
+          {lesson.blocks.map((block, index) => (
             <div
               key={block.id}
               onClick={() => setSelectedBlockId(block.id)}
@@ -143,14 +130,8 @@ export default function LessonPage() {
             >
               <ContentBlock
                 content={block.content}
-                blockIndex={block.blockIndex}
-                blockId={block.id}
-                onAudit={handleAudit}
-                auditPassed={
-                  auditResults[block.id] !== undefined
-                    ? auditResults[block.id]
-                    : null
-                }
+                blockNumber={index + 1}
+                auditPassed={block.auditPassed ?? null}
               />
             </div>
           ))}
@@ -171,7 +152,7 @@ export default function LessonPage() {
             disabled={streaming}
             className="w-full py-3 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 font-medium"
           >
-            {streaming ? "Loading..." : "Next Block"}
+            {streaming ? "Loading..." : lesson.blocks.length === 0 ? "Start Lesson" : "Next Block"}
           </button>
         </div>
       </div>

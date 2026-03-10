@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { lessons, contentBlocks } from "@/lib/db/schema";
+import { lessons, contentBlocks, auditResults } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { streamContentBlock } from "@/lib/ai/content-generator-stream";
+import { auditContentBlock } from "@/lib/ai/audit-chain";
 import { randomUUID } from "crypto";
 import { requireAuth, requireLessonOwnership } from "@/lib/auth";
 
@@ -60,6 +61,18 @@ export async function POST(
             content: fullContent,
             status: "delivered",
           });
+
+          try {
+            const { passed, feedback } = await auditContentBlock(fullContent);
+            await db.insert(auditResults).values({
+              id: randomUUID(),
+              contentBlockId: blockId,
+              passed,
+              feedback: feedback ?? null,
+            });
+          } catch (auditErr) {
+            console.error("Audit error (block still created):", auditErr);
+          }
         } catch (err) {
           console.error("Stream error:", err);
           controller.enqueue(

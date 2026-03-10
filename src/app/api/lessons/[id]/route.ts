@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { lessons, contentBlocks, modules } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { lessons, contentBlocks, modules, auditResults } from "@/lib/db/schema";
+import { eq, inArray, desc } from "drizzle-orm";
 import { requireAuth, requireLessonOwnership } from "@/lib/auth";
 
 export async function GET(
@@ -38,10 +38,36 @@ export async function GET(
       .where(eq(contentBlocks.lessonId, lessonId))
       .orderBy(contentBlocks.blockIndex);
 
+    const blockIds = blocks.map((b) => b.id);
+    const audits =
+      blockIds.length > 0
+        ? await db
+            .select({
+              contentBlockId: auditResults.contentBlockId,
+              passed: auditResults.passed,
+              auditedAt: auditResults.auditedAt,
+            })
+            .from(auditResults)
+            .where(inArray(auditResults.contentBlockId, blockIds))
+            .orderBy(desc(auditResults.auditedAt))
+        : [];
+
+    const latestAuditByBlock = new Map<string, boolean>();
+    for (const a of audits) {
+      if (!latestAuditByBlock.has(a.contentBlockId)) {
+        latestAuditByBlock.set(a.contentBlockId, a.passed);
+      }
+    }
+
+    const blocksWithAudit = blocks.map((block) => ({
+      ...block,
+      auditPassed: latestAuditByBlock.get(block.id) ?? null,
+    }));
+
     return NextResponse.json({
       ...lesson,
       moduleTitle: mod?.title,
-      blocks,
+      blocks: blocksWithAudit,
     });
   } catch (error) {
     console.error("Error fetching lesson:", error);
