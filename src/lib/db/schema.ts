@@ -5,6 +5,7 @@ import {
   integer,
   boolean,
   jsonb,
+  unique,
 } from "drizzle-orm/pg-core";
 
 export const subjects = pgTable("subjects", {
@@ -74,6 +75,24 @@ export const answers = pgTable("answers", {
   answer: text("answer").notNull(),
   answeredAt: timestamp("answered_at").defaultNow().notNull(),
 });
+
+export const blockReads = pgTable(
+  "block_reads",
+  {
+    id: text("id").primaryKey(),
+    contentBlockId: text("content_block_id")
+      .notNull()
+      .references(() => contentBlocks.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(),
+    readAt: timestamp("read_at").defaultNow().notNull(),
+  },
+  (t) => [
+    unique("block_reads_content_block_user_unique").on(
+      t.contentBlockId,
+      t.userId
+    ),
+  ]
+);
 
 export const auditResults = pgTable("audit_results", {
   id: text("id").primaryKey(),

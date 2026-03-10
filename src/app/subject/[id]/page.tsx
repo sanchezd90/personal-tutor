@@ -56,6 +56,21 @@ export default function SubjectPage() {
     }
   }
 
+  async function deleteSyllabus(syllabusId: string, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm("Delete this syllabus? This cannot be undone.")) return;
+    try {
+      const res = await fetch(`/api/syllabi/${syllabusId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error("Failed to delete");
+      await fetchSyllabi();
+    } catch {
+      setError("Failed to delete syllabus");
+    }
+  }
+
   const generateSyllabus = useCallback(async () => {
     setGenerating(true);
     setError(null);
@@ -143,14 +158,21 @@ export default function SubjectPage() {
             </h2>
             <ul className="space-y-2">
               {syllabi.map((s) => (
-                <li key={s.id}>
+                <li key={s.id} className="flex items-center gap-2 group">
                   <Link
                     href={`/syllabus/${s.id}`}
-                    className="block px-4 py-3 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200"
+                    className="flex-1 px-4 py-3 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200"
                   >
                     Syllabus from{" "}
                     {new Date(s.createdAt).toLocaleDateString()}
                   </Link>
+                  <button
+                    onClick={(e) => deleteSyllabus(s.id, e)}
+                    className="px-3 py-2 rounded-lg text-red-400 hover:bg-red-900/30 opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Delete syllabus"
+                  >
+                    Delete
+                  </button>
                 </li>
               ))}
             </ul>

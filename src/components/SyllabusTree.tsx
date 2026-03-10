@@ -7,6 +7,8 @@ type Lesson = {
   moduleId: string;
   order: number;
   title: string;
+  progressPct?: number;
+  isDone?: boolean;
 };
 
 type Module = {
@@ -38,9 +40,21 @@ export function SyllabusTree({ syllabusId, modules }: SyllabusTreeProps) {
               <li key={lesson.id}>
                 <Link
                   href={`/lesson/${lesson.id}`}
-                  className="block px-4 py-3 text-slate-300 hover:bg-slate-700/50 hover:text-slate-100 transition-colors"
+                  className="flex items-center justify-between px-4 py-3 text-slate-300 hover:bg-slate-700/50 hover:text-slate-100 transition-colors"
                 >
-                  {lesson.order + 1}. {lesson.title}
+                  <span>
+                    {lesson.order + 1}. {lesson.title}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    {lesson.isDone && (
+                      <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-xs">
+                        Done
+                      </span>
+                    )}
+                    <span className="text-slate-500 text-xs">
+                      {lesson.progressPct ?? 0}%
+                    </span>
+                  </span>
                 </Link>
               </li>
             ))}

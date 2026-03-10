@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { lessons, contentBlocks, modules, auditResults } from "@/lib/db/schema";
-import { eq, inArray, desc } from "drizzle-orm";
+import {
+  lessons,
+  contentBlocks,
+  modules,
+  auditResults,
+  blockReads,
+} from "@/lib/db/schema";
+import { eq, inArray, desc, and } from "drizzle-orm";
 import { requireAuth, requireLessonOwnership } from "@/lib/auth";
 
 export async function GET(
@@ -59,9 +65,24 @@ export async function GET(
       }
     }
 
+    const readBlockIds =
+      blockIds.length > 0
+        ? await db
+            .select({ contentBlockId: blockReads.contentBlockId })
+            .from(blockReads)
+            .where(
+              and(
+                inArray(blockReads.contentBlockId, blockIds),
+                eq(blockReads.userId, user.id)
+              )
+            )
+        : [];
+    const readSet = new Set(readBlockIds.map((r) => r.contentBlockId));
+
     const blocksWithAudit = blocks.map((block) => ({
       ...block,
       auditPassed: latestAuditByBlock.get(block.id) ?? null,
+      read: readSet.has(block.id),
     }));
 
     return NextResponse.json({
