@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import ReactMarkdown from "react-markdown";
 import { ContentBlock } from "@/components/ContentBlock";
 import { QASidebar } from "@/components/QASidebar";
 
@@ -11,6 +10,7 @@ type Block = {
   id: string;
   lessonId: string;
   blockIndex: number;
+  title?: string | null;
   content: string;
   status: string;
   deliveredAt: string;
@@ -24,6 +24,7 @@ type Lesson = {
   order: number;
   title: string;
   moduleTitle?: string;
+  syllabusId?: string;
   blocks: Block[];
 };
 
@@ -32,8 +33,7 @@ export default function LessonPage() {
   const id = params.id as string;
   const [lesson, setLesson] = useState<Lesson | null>(null);
   const [loading, setLoading] = useState(true);
-  const [streaming, setStreaming] = useState(false);
-  const [streamingContent, setStreamingContent] = useState("");
+  const [generating, setGenerating] = useState(false);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [togglingRead, setTogglingRead] = useState<string | null>(null);
@@ -57,37 +57,19 @@ export default function LessonPage() {
     fetchLesson();
   }, [fetchLesson]);
 
-  async function loadNextBlock() {
-    setStreaming(true);
-    setStreamingContent("");
-    setSelectedBlockId(null);
+  useEffect(() => {
+    if (!lesson || loading || generating) return;
+    if (lesson.blocks.length > 0) return;
 
-    try {
-      const res = await fetch(`/api/lessons/${id}/content`, {
-        method: "POST",
-      });
-      if (!res.ok) throw new Error("Failed to fetch content");
-
-      const reader = res.body?.getReader();
-      const decoder = new TextDecoder();
-      if (!reader) throw new Error("No stream");
-
-      let content = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        content += chunk;
-        setStreamingContent(content);
-      }
-
-      await fetchLesson();
-    } catch {
-      setError("Failed to load content");
-    } finally {
-      setStreaming(false);
-    }
-  }
+    setGenerating(true);
+    fetch(`/api/lessons/${id}/content/generate-all`, { method: "POST" })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Failed to generate lesson");
+        await fetchLesson();
+      })
+      .catch(() => setError("Failed to generate lesson content"))
+      .finally(() => setGenerating(false));
+  }, [lesson, loading, generating, id, fetchLesson]);
 
   async function handleReadToggle(blockId: string, read: boolean) {
     setTogglingRead(blockId);
@@ -110,9 +92,6 @@ export default function LessonPage() {
   const progressPct =
     totalBlocks > 0 ? Math.round((readCount / totalBlocks) * 100) : 0;
   const isDone = totalBlocks > 0 && progressPct === 100;
-  let nextButtonLabel = "Next Block";
-  if (streaming) nextButtonLabel = "Loading...";
-  else if (lesson && lesson.blocks.length === 0) nextButtonLabel = "Start Lesson";
 
   if (loading) {
     return (
@@ -122,12 +101,27 @@ export default function LessonPage() {
     );
   }
 
+  if (lesson?.blocks.length === 0) {
+    return (
+      <main className="min-h-screen flex items-center justify-center p-8 bg-slate-950 text-slate-100">
+        <div className="text-center">
+          <div className="animate-pulse">
+            Preparing lesson... This may take a minute.
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   if (error || !lesson) {
     return (
       <main className="min-h-screen flex flex-col items-center justify-center p-8 bg-slate-950 text-slate-100">
         <p className="text-red-400 mb-4">{error ?? "Lesson not found"}</p>
-        <Link href="/" className="text-emerald-400 hover:text-emerald-300 underline">
-          Back to home
+        <Link
+          href={lesson?.syllabusId ? `/syllabus/${lesson.syllabusId}` : "/"}
+          className="text-emerald-400 hover:text-emerald-300 underline"
+        >
+          {lesson?.syllabusId ? "Back to syllabus" : "Back to home"}
         </Link>
       </main>
     );
@@ -138,10 +132,10 @@ export default function LessonPage() {
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-2xl mx-auto p-8">
           <Link
-            href="/"
+            href={lesson.syllabusId ? `/syllabus/${lesson.syllabusId}` : "/"}
             className="text-slate-400 hover:text-slate-200 text-sm mb-6 inline-block"
           >
-            ← Back to home
+            ← Back to syllabus
           </Link>
 
           <div className="flex items-center justify-between mb-2">
@@ -161,19 +155,33 @@ export default function LessonPage() {
             <p className="text-slate-400 text-sm mb-8">{lesson.moduleTitle}</p>
           )}
 
+          {totalBlocks > 0 && (
+            <details
+              className="mb-8 rounded-lg border border-slate-700 bg-slate-800/50 overflow-hidden"
+              open
+            >
+              <summary className="px-4 py-3 cursor-pointer font-medium text-slate-200 hover:bg-slate-700/50">
+                Lesson overview ({totalBlocks} block{totalBlocks === 1 ? "" : "s"})
+              </summary>
+              <ol className="list-decimal list-inside divide-y divide-slate-700/50 px-4 py-2">
+                {lesson.blocks.map((block, index) => (
+                  <li
+                    key={block.id}
+                    className="py-2 text-slate-300 text-sm"
+                  >
+                    {block.title ?? `Block ${index + 1}`}
+                  </li>
+                ))}
+              </ol>
+            </details>
+          )}
+
           {lesson.blocks.map((block, index) => (
-            <div
+            <button
               key={block.id}
-              role="button"
-              tabIndex={0}
+              type="button"
               onClick={() => setSelectedBlockId(block.id)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  setSelectedBlockId(block.id);
-                }
-              }}
-              className="cursor-pointer"
+              className="w-full text-left cursor-pointer block"
             >
               <ContentBlock
                 content={block.content}
@@ -185,27 +193,8 @@ export default function LessonPage() {
                   togglingRead === block.id ? undefined : handleReadToggle
                 }
               />
-            </div>
+            </button>
           ))}
-
-          {streaming && (
-            <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-6 mb-6 animate-pulse">
-              <span className="text-slate-400 text-sm">Loading...</span>
-              {streamingContent && (
-                <div className="mt-4 prose prose-invert prose-slate max-w-none prose-p:text-slate-300 prose-headings:text-slate-100">
-                  <ReactMarkdown>{streamingContent}</ReactMarkdown>
-                </div>
-              )}
-            </div>
-          )}
-
-          <button
-            onClick={loadNextBlock}
-            disabled={streaming}
-            className="w-full py-3 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 font-medium"
-          >
-            {nextButtonLabel}
-          </button>
         </div>
       </div>
 

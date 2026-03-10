@@ -53,6 +53,7 @@ export const contentBlocks = pgTable("content_blocks", {
     .notNull()
     .references(() => lessons.id, { onDelete: "cascade" }),
   blockIndex: integer("block_index").notNull(),
+  title: text("title"),
   content: text("content").notNull(),
   status: text("status").default("delivered").notNull(),
   deliveredAt: timestamp("delivered_at").defaultNow().notNull(),

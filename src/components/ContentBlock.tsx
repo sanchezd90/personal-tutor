@@ -31,7 +31,10 @@ export function ContentBlock({
         <span className="text-slate-400 text-sm">Block {blockNumber}</span>
         <div className="flex items-center gap-3">
           {onReadToggle && (
-            <label className="flex items-center gap-2 cursor-pointer">
+            <label
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-2 cursor-pointer"
+            >
               <input
                 type="checkbox"
                 checked={read}

@@ -88,6 +88,7 @@ export async function GET(
     return NextResponse.json({
       ...lesson,
       moduleTitle: mod?.title,
+      syllabusId: mod?.syllabusId,
       blocks: blocksWithAudit,
     });
   } catch (error) {
