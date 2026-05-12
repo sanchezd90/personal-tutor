@@ -66,7 +66,7 @@ export default function SyllabusPage() {
     try {
       const res = await fetch(`/api/syllabi/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete");
-      router.push(syllabus ? `/subject/${syllabus.subjectId}` : "/");
+      router.push("/");
     } catch {
       setError("Failed to delete syllabus");
     } finally {
