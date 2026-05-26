@@ -34,7 +34,7 @@ export async function POST(
       id: syllabusId,
       userId: user.id,
       subjectId,
-      structure: structure as unknown as { modules: Array<{ title: string; lessons: Array<{ title: string }> }> },
+      structure,
     });
 
     for (let i = 0; i < structure.modules.length; i++) {

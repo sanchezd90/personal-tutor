@@ -1,36 +1,63 @@
-import { ChatOpenAI } from "@langchain/openai";
-import { StructuredOutputParser } from "@langchain/core/output_parsers";
 import { z } from "zod";
-import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { invokeJson } from "@/lib/ai/invoke-json";
+import { MODEL_STRUCTURED } from "@/lib/ai/models";
 
 const auditSchema = z.object({
   passed: z.boolean(),
   feedback: z.string().optional(),
 });
 
-const parser = StructuredOutputParser.fromZodSchema(auditSchema);
+const batchAuditSchema = z.object({
+  results: z.array(
+    z.object({
+      index: z.number(),
+      passed: z.boolean(),
+      feedback: z.string().optional(),
+    })
+  ),
+});
 
 export async function auditContentBlock(
   content: string
 ): Promise<{ passed: boolean; feedback?: string }> {
-  const model = new ChatOpenAI({
-    model: "gpt-4o-mini",
-    temperature: 0.2,
-  });
+  return invokeJson(
+    auditSchema,
+    `Fact-check educational content. Return JSON: { "passed": boolean, "feedback"?: string }.
+feedback is required when passed is false.`,
+    `Content to audit:\n\n${content}`,
+    { model: MODEL_STRUCTURED, temperature: 0.2 }
+  );
+}
 
-  const response = await model.invoke([
-    new SystemMessage(
-      `You are a fact-checker for educational content. Review the content block for accuracy.
-Return a JSON object with:
-- "passed": true if the content appears factually correct, false if there are errors or concerning inaccuracies
-- "feedback": optional string with specific feedback (e.g., what to correct) if passed is false
+export type BlockAuditInput = {
+  index: number;
+  content: string;
+};
 
-${parser.getFormatInstructions()}`
-    ),
-    new HumanMessage(`Content to audit:\n\n${content}`),
-  ]);
+export async function auditContentBlocksBatch(
+  blocks: BlockAuditInput[]
+): Promise<Array<{ index: number; passed: boolean; feedback?: string }>> {
+  if (blocks.length === 0) return [];
+  if (blocks.length === 1) {
+    const single = await auditContentBlock(blocks[0].content);
+    return [{ index: blocks[0].index, ...single }];
+  }
 
-  const text = typeof response.content === "string" ? response.content : String(response.content);
-  const result = await parser.parse(text);
-  return result;
+  const numbered = blocks
+    .map(
+      (b, i) =>
+        `--- Block ${i} (index ${b.index}) ---\n${b.content.slice(0, 4000)}`
+    )
+    .join("\n\n");
+
+  const result = await invokeJson(
+    batchAuditSchema,
+    `Fact-check each numbered educational block. Return JSON:
+{ "results": [{ "index": <original index field>, "passed": boolean, "feedback"?: string }] }
+One result per block, using the index value from each block header.`,
+    numbered,
+    { model: MODEL_STRUCTURED, temperature: 0.2, maxTokens: 800 }
+  );
+
+  return result.results;
 }

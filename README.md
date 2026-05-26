@@ -69,6 +69,10 @@ Open [http://localhost:3000](http://localhost:3000).
 3. Run `npm run db:push` manually (or add to build) before first deploy
 4. Deploy
 
+## Documentation
+
+- [AI behavior, features & token optimizations](docs/AI_BEHAVIOR_AND_FEATURES.md)
+
 ## Scripts
 
 - `npm run dev` — Start dev server

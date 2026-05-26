@@ -1,12 +1,9 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { lessons, contentBlocks, auditResults } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
-import { streamContentBlock } from "@/lib/ai/content-generator-stream";
-import { auditContentBlock } from "@/lib/ai/audit-chain";
-import { generateLessonOutline } from "@/lib/ai/lesson-outline-generator";
-import { randomUUID } from "node:crypto";
+import { generateLessonContent } from "@/lib/ai/generate-lesson-content";
 import { requireAuth, requireLessonOwnership } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { lessons } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 export async function POST(
   request: Request,
@@ -34,80 +31,20 @@ export async function POST(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const existingBlocks = await db
-      .select()
-      .from(contentBlocks)
-      .where(eq(contentBlocks.lessonId, lessonId))
-      .orderBy(contentBlocks.blockIndex);
+    const result = await generateLessonContent(lessonId);
 
-    if (existingBlocks.length > 0) {
+    if (result.alreadyComplete) {
       return NextResponse.json({
         ok: true,
         message: "Lesson already has blocks",
-        blockCount: existingBlocks.length,
+        blockCount: result.blockCount,
       });
-    }
-
-    const outline = await generateLessonOutline(lesson.title);
-
-    const blockIds: string[] = [];
-    for (let i = 0; i < outline.blockCount; i++) {
-      const blockId = randomUUID();
-      blockIds.push(blockId);
-      await db.insert(contentBlocks).values({
-        id: blockId,
-        lessonId,
-        blockIndex: i,
-        title: outline.titles[i] ?? `Block ${i + 1}`,
-        content: "",
-        status: "pending",
-      });
-    }
-
-    const previousBlocks: string[] = [];
-    for (let i = 0; i < outline.blockCount; i++) {
-      let fullContent = "";
-      for await (const chunk of streamContentBlock(
-        lesson.title,
-        previousBlocks,
-        i,
-        {
-          blockTitle: outline.titles[i],
-          outlineTitles: outline.titles,
-        }
-      )) {
-        fullContent += chunk;
-      }
-
-      previousBlocks.push(fullContent);
-
-      const blockId = blockIds[i];
-      if (!blockId) continue;
-
-      await db
-        .update(contentBlocks)
-        .set({
-          content: fullContent,
-          status: "delivered",
-        })
-        .where(eq(contentBlocks.id, blockId));
-
-      try {
-        const { passed, feedback } = await auditContentBlock(fullContent);
-        await db.insert(auditResults).values({
-          id: randomUUID(),
-          contentBlockId: blockId,
-          passed,
-          feedback: feedback ?? null,
-        });
-      } catch (auditErr) {
-        console.error("Audit error (block still created):", auditErr);
-      }
     }
 
     return NextResponse.json({
       ok: true,
-      blockCount: outline.blockCount,
+      blockCount: result.blockCount,
+      resumed: result.resumed,
     });
   } catch (error) {
     console.error("Error generating lesson content:", error);

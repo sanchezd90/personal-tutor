@@ -7,6 +7,7 @@ import {
   jsonb,
   unique,
 } from "drizzle-orm/pg-core";
+import type { SyllabusStructure } from "@/lib/ai/syllabus-types";
 
 export const subjects = pgTable("subjects", {
   id: text("id").primaryKey(),
@@ -25,7 +26,7 @@ export const syllabi = pgTable("syllabi", {
   subjectId: text("subject_id")
     .notNull()
     .references(() => subjects.id, { onDelete: "cascade" }),
-  structure: jsonb("structure").$type<{ modules: Array<{ title: string; lessons: Array<{ title: string }> }> }>(),
+  structure: jsonb("structure").$type<SyllabusStructure>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -55,6 +56,7 @@ export const contentBlocks = pgTable("content_blocks", {
   blockIndex: integer("block_index").notNull(),
   title: text("title"),
   content: text("content").notNull(),
+  summary: text("summary"),
   status: text("status").default("delivered").notNull(),
   deliveredAt: timestamp("delivered_at").defaultNow().notNull(),
 });
