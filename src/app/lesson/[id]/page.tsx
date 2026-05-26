@@ -169,7 +169,7 @@ export default function LessonPage() {
                     key={block.id}
                     className="py-2 text-slate-300 text-sm"
                   >
-                    {block.title ?? `Block ${index + 1}`}
+                    {block.title ?? `Block ${block.blockIndex + 1}`}
                   </li>
                 ))}
               </ol>
@@ -185,7 +185,8 @@ export default function LessonPage() {
             >
               <ContentBlock
                 content={block.content}
-                blockNumber={index + 1}
+                blockNumber={block.blockIndex + 1}
+                title={block.title}
                 blockId={block.id}
                 auditPassed={block.auditPassed ?? null}
                 read={block.read ?? false}

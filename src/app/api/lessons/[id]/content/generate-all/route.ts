@@ -70,7 +70,11 @@ export async function POST(
       for await (const chunk of streamContentBlock(
         lesson.title,
         previousBlocks,
-        i
+        i,
+        {
+          blockTitle: outline.titles[i],
+          outlineTitles: outline.titles,
+        }
       )) {
         fullContent += chunk;
       }

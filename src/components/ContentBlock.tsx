@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 type ContentBlockProps = Readonly<{
   content: string;
   blockNumber: number;
+  title?: string | null;
   blockId: string;
   auditPassed?: boolean | null;
   read?: boolean;
@@ -14,6 +15,7 @@ type ContentBlockProps = Readonly<{
 export function ContentBlock({
   content,
   blockNumber,
+  title,
   blockId,
   auditPassed,
   read = false,
@@ -28,7 +30,12 @@ export function ContentBlock({
   return (
     <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-6 mb-6">
       <div className="flex items-center justify-between mb-4">
-        <span className="text-slate-400 text-sm">Block {blockNumber}</span>
+        <div>
+          {title ? (
+            <h2 className="text-slate-100 font-medium">{title}</h2>
+          ) : null}
+          <span className="text-slate-400 text-sm">Block {blockNumber}</span>
+        </div>
         <div className="flex items-center gap-3">
           {onReadToggle && (
             <label
