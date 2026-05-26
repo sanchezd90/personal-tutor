@@ -81,10 +81,17 @@ export async function GET(
         const lessonsWithProgress = await Promise.all(
           lessonList.map(async (lesson) => {
             const blocks = await db
-              .select({ id: contentBlocks.id })
+              .select({
+                id: contentBlocks.id,
+                status: contentBlocks.status,
+                content: contentBlocks.content,
+              })
               .from(contentBlocks)
               .where(eq(contentBlocks.lessonId, lesson.id));
-            const blockIds = blocks.map((b) => b.id);
+            const deliveredBlocks = blocks.filter(
+              (b) => b.status === "delivered" && b.content.trim().length > 0
+            );
+            const blockIds = deliveredBlocks.map((b) => b.id);
             const totalBlocks = blockIds.length;
 
             let readCount = 0;

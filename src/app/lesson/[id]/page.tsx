@@ -28,12 +28,23 @@ type Lesson = {
   blocks: Block[];
 };
 
+function isDeliveredBlock(block: Block): boolean {
+  return block.status === "delivered" && block.content.trim().length > 0;
+}
+
 export default function LessonPage() {
   const params = useParams();
   const id = params.id as string;
   const [lesson, setLesson] = useState<Lesson | null>(null);
   const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
+  const [generatingInitial, setGeneratingInitial] = useState(false);
+  const [generatingNext, setGeneratingNext] = useState(false);
+  const [streamingBlock, setStreamingBlock] = useState<{
+    id: string;
+    blockIndex: number;
+    title?: string | null;
+    content: string;
+  } | null>(null);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [togglingRead, setTogglingRead] = useState<string | null>(null);
@@ -58,18 +69,24 @@ export default function LessonPage() {
   }, [fetchLesson]);
 
   useEffect(() => {
-    if (!lesson || loading || generating) return;
-    if (lesson.blocks.length > 0) return;
+    if (!lesson || loading || generatingInitial) return;
 
-    setGenerating(true);
+    const hasDeliveredContent = lesson.blocks.some(isDeliveredBlock);
+    const needsInitialGeneration =
+      lesson.blocks.length === 0 ||
+      (lesson.blocks.length > 0 && !hasDeliveredContent);
+
+    if (!needsInitialGeneration) return;
+
+    setGeneratingInitial(true);
     fetch(`/api/lessons/${id}/content/generate-all`, { method: "POST" })
       .then(async (res) => {
         if (!res.ok) throw new Error("Failed to generate lesson");
         await fetchLesson();
       })
       .catch(() => setError("Failed to generate lesson content"))
-      .finally(() => setGenerating(false));
-  }, [lesson, loading, generating, id, fetchLesson]);
+      .finally(() => setGeneratingInitial(false));
+  }, [lesson, loading, generatingInitial, id, fetchLesson]);
 
   async function handleReadToggle(blockId: string, read: boolean) {
     setTogglingRead(blockId);
@@ -87,11 +104,62 @@ export default function LessonPage() {
     }
   }
 
-  const readCount = lesson?.blocks.filter((b) => b.read).length ?? 0;
-  const totalBlocks = lesson?.blocks.length ?? 0;
+  async function handleGenerateNext() {
+    if (!lesson || generatingNext) return;
+
+    const nextBlock = lesson.blocks.find((block) => !isDeliveredBlock(block));
+    if (!nextBlock) return;
+
+    setGeneratingNext(true);
+    setError(null);
+    setStreamingBlock({
+      id: nextBlock.id,
+      blockIndex: nextBlock.blockIndex,
+      title: nextBlock.title,
+      content: "",
+    });
+
+    try {
+      const res = await fetch(`/api/lessons/${id}/content`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed to generate next block");
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response body");
+
+      const decoder = new TextDecoder();
+      let content = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        content += decoder.decode(value, { stream: true });
+        setStreamingBlock((prev) =>
+          prev ? { ...prev, content } : prev
+        );
+      }
+
+      await fetchLesson();
+    } catch {
+      setError("Failed to generate next section");
+    } finally {
+      setStreamingBlock(null);
+      setGeneratingNext(false);
+    }
+  }
+
+  const deliveredBlocks = lesson?.blocks.filter(isDeliveredBlock) ?? [];
+  const nextPendingBlock = lesson?.blocks.find((block) => !isDeliveredBlock(block));
+  const readCount = deliveredBlocks.filter((b) => b.read).length;
   const progressPct =
-    totalBlocks > 0 ? Math.round((readCount / totalBlocks) * 100) : 0;
-  const isDone = totalBlocks > 0 && progressPct === 100;
+    deliveredBlocks.length > 0
+      ? Math.round((readCount / deliveredBlocks.length) * 100)
+      : 0;
+  const isDone =
+    deliveredBlocks.length > 0 &&
+    lesson !== null &&
+    deliveredBlocks.length === lesson.blocks.length &&
+    progressPct === 100;
+  const totalOutlineBlocks = lesson?.blocks.length ?? 0;
 
   if (loading) {
     return (
@@ -101,12 +169,12 @@ export default function LessonPage() {
     );
   }
 
-  if (lesson?.blocks.length === 0) {
+  if (generatingInitial || (lesson?.blocks.length === 0 && !error)) {
     return (
       <main className="min-h-screen flex items-center justify-center p-8 bg-slate-950 text-slate-100">
         <div className="text-center">
           <div className="animate-pulse">
-            Preparing lesson... This may take a minute.
+            Preparing lesson overview and first section...
           </div>
         </div>
       </main>
@@ -155,28 +223,35 @@ export default function LessonPage() {
             <p className="text-slate-400 text-sm mb-8">{lesson.moduleTitle}</p>
           )}
 
-          {totalBlocks > 0 && (
+          {totalOutlineBlocks > 0 && (
             <details
               className="mb-8 rounded-lg border border-slate-700 bg-slate-800/50 overflow-hidden"
               open
             >
               <summary className="px-4 py-3 cursor-pointer font-medium text-slate-200 hover:bg-slate-700/50">
-                Lesson overview ({totalBlocks} block{totalBlocks === 1 ? "" : "s"})
+                Lesson overview ({deliveredBlocks.length} of {totalOutlineBlocks}{" "}
+                section{totalOutlineBlocks === 1 ? "" : "s"} ready)
               </summary>
               <ol className="list-decimal list-inside divide-y divide-slate-700/50 px-4 py-2">
-                {lesson.blocks.map((block, index) => (
-                  <li
-                    key={block.id}
-                    className="py-2 text-slate-300 text-sm"
-                  >
-                    {block.title ?? `Block ${block.blockIndex + 1}`}
-                  </li>
-                ))}
+                {lesson.blocks.map((block) => {
+                  const ready = isDeliveredBlock(block);
+                  return (
+                    <li
+                      key={block.id}
+                      className={`py-2 text-sm ${
+                        ready ? "text-slate-300" : "text-slate-500 italic"
+                      }`}
+                    >
+                      {block.title ?? `Block ${block.blockIndex + 1}`}
+                      {!ready && " (not generated yet)"}
+                    </li>
+                  );
+                })}
               </ol>
             </details>
           )}
 
-          {lesson.blocks.map((block, index) => (
+          {deliveredBlocks.map((block) => (
             <button
               key={block.id}
               type="button"
@@ -196,6 +271,37 @@ export default function LessonPage() {
               />
             </button>
           ))}
+
+          {streamingBlock && (
+            <div className="w-full text-left block opacity-90">
+              <ContentBlock
+                content={streamingBlock.content || "Generating..."}
+                blockNumber={streamingBlock.blockIndex + 1}
+                title={streamingBlock.title}
+                blockId={streamingBlock.id}
+              />
+            </div>
+          )}
+
+          {nextPendingBlock && !streamingBlock && (
+            <div className="rounded-lg border border-dashed border-slate-600 bg-slate-800/30 p-6 mb-6 text-center">
+              <p className="text-slate-400 text-sm mb-4">
+                Next section:{" "}
+                <span className="text-slate-200">
+                  {nextPendingBlock.title ??
+                    `Block ${nextPendingBlock.blockIndex + 1}`}
+                </span>
+              </p>
+              <button
+                type="button"
+                onClick={handleGenerateNext}
+                disabled={generatingNext}
+                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
+              >
+                {generatingNext ? "Generating..." : "Generate next section"}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

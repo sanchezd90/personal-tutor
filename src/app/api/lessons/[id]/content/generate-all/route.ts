@@ -36,14 +36,18 @@ export async function POST(
     if (result.alreadyComplete) {
       return NextResponse.json({
         ok: true,
-        message: "Lesson already has blocks",
+        message: "Lesson already has all blocks",
         blockCount: result.blockCount,
+        deliveredCount: result.deliveredCount,
+        hasMore: result.hasMore,
       });
     }
 
     return NextResponse.json({
       ok: true,
       blockCount: result.blockCount,
+      deliveredCount: result.deliveredCount,
+      hasMore: result.hasMore,
       resumed: result.resumed,
     });
   } catch (error) {

@@ -1,17 +1,11 @@
-import { db } from "@/lib/db";
-import { lessons, contentBlocks, auditResults } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
-import { streamContentBlock } from "@/lib/ai/content-generator-stream";
-import { shouldAutoAudit } from "@/lib/ai/audit-policy";
-import { auditContentBlock } from "@/lib/ai/audit-chain";
-import { summarizeBlockContent } from "@/lib/ai/block-summary";
 import {
-  formatCurriculumContext,
-  getLessonGenerationContext,
-} from "@/lib/ai/lesson-context";
-import { resolveLessonOutline } from "@/lib/ai/resolve-lesson-outline";
-import { randomUUID } from "crypto";
+  generateNextLessonBlock,
+  isBlockComplete,
+} from "@/lib/ai/generate-lesson-content";
 import { requireAuth, requireLessonOwnership } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { contentBlocks, lessons } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 export async function POST(
   request: Request,
@@ -45,91 +39,29 @@ export async function POST(
       });
     }
 
-    const ctx = await getLessonGenerationContext(lessonId);
-    if (!ctx) {
-      return new Response(JSON.stringify({ error: "Lesson not found" }), {
-        status: 404,
-      });
-    }
-
     const existingBlocks = await db
       .select()
       .from(contentBlocks)
       .where(eq(contentBlocks.lessonId, lessonId))
       .orderBy(contentBlocks.blockIndex);
 
-    const blockIndex = existingBlocks.length;
-    const outline = await resolveLessonOutline(ctx);
-
-    if (blockIndex >= outline.blockCount) {
+    const nextBlock = existingBlocks.find((row) => !isBlockComplete(row));
+    if (!nextBlock) {
       return new Response(
-        JSON.stringify({ error: "Lesson outline has no more blocks" }),
+        JSON.stringify({ error: "Lesson has no more blocks to generate" }),
         { status: 400 }
       );
     }
 
-    const previousSummaries: string[] = [];
-    for (const b of existingBlocks) {
-      if (b.summary?.trim()) {
-        previousSummaries.push(b.summary);
-      } else if (b.content.trim()) {
-        previousSummaries.push(await summarizeBlockContent(b.content));
-      }
-    }
-
-    const curriculumContext = formatCurriculumContext(ctx);
-    const blockId = randomUUID();
-
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
-        let fullContent = "";
         try {
-          for await (const chunk of streamContentBlock(ctx.lessonTitle, blockIndex, {
-            blockTitle: outline.titles[blockIndex],
-            slimOutline: {
-              blockIndex,
-              blockCount: outline.blockCount,
-              currentTitle: outline.titles[blockIndex],
-              previousTitle:
-                blockIndex > 0 ? (outline.titles[blockIndex - 1] ?? null) : null,
-              nextTitle:
-                blockIndex < outline.blockCount - 1
-                  ? (outline.titles[blockIndex + 1] ?? null)
-                  : null,
+          await generateNextLessonBlock(lessonId, {
+            onChunk: (chunk) => {
+              controller.enqueue(encoder.encode(chunk));
             },
-            previousSummaries,
-            curriculumContext,
-          })) {
-            fullContent += chunk;
-            controller.enqueue(encoder.encode(chunk));
-          }
-
-          const summary = await summarizeBlockContent(fullContent);
-
-          await db.insert(contentBlocks).values({
-            id: blockId,
-            lessonId,
-            blockIndex,
-            title: outline.titles[blockIndex] ?? `Block ${blockIndex + 1}`,
-            content: fullContent,
-            summary,
-            status: "delivered",
           });
-
-          if (shouldAutoAudit(blockIndex, fullContent)) {
-            try {
-              const { passed, feedback } = await auditContentBlock(fullContent);
-              await db.insert(auditResults).values({
-                id: randomUUID(),
-                contentBlockId: blockId,
-                passed,
-                feedback: feedback ?? null,
-              });
-            } catch (auditErr) {
-              console.error("Audit error (block still created):", auditErr);
-            }
-          }
         } catch (err) {
           console.error("Stream error:", err);
           controller.enqueue(
@@ -145,6 +77,8 @@ export async function POST(
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
         "Transfer-Encoding": "chunked",
+        "X-Block-Id": nextBlock.id,
+        "X-Block-Index": String(nextBlock.blockIndex),
       },
     });
   } catch (error) {

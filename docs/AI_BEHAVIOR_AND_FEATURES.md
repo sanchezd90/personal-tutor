@@ -42,21 +42,23 @@ This document describes how the app uses AI today: what controls syllabus and le
 
 | Aspect | Behavior |
 |--------|----------|
-| **User input** | None at generation time. |
-| **Trigger** | Opening a lesson with no (or incomplete) content blocks calls `POST /api/lessons/[id]/content/generate-all` → `generateLessonContent()`. |
-| **Orchestration** | `src/lib/ai/generate-lesson-content.ts` (not inlined in the route). |
-| **Step 1 — Outline** | `resolveLessonOutline(ctx)`: use prebuilt outline from `syllabi.structure` when valid; otherwise one LLM call with full curriculum context. |
-| **Step 2 — Blocks** | For each block: `streamContentBlock` → `summarizeBlockContent` → save `content` + `summary`. |
+| **User input** | None for the first section; user clicks **Generate next section** for later sections. |
+| **Initial trigger** | Opening a lesson with no delivered blocks calls `POST /api/lessons/[id]/content/generate-all` → `generateLessonContent()`. |
+| **On-demand trigger** | User clicks **Generate next section** → `POST /api/lessons/[id]/content` → `generateNextLessonBlock()` (streams to the client). |
+| **Orchestration** | `src/lib/ai/generate-lesson-content.ts` (`generateLessonContent`, `generateBlockAtIndex`, `generateNextLessonBlock`). |
+| **Step 1 — Outline / index** | `resolveLessonOutline(ctx)`: use prebuilt outline from `syllabi.structure` when valid; otherwise one LLM call. All block rows are created upfront (`status: pending`, titles from outline) so the lesson index is visible immediately. |
+| **Step 2 — First block** | On initial open, only block 0 is generated: `streamContentBlock` → `summarizeBlockContent` → save `content` + `summary` → `status: delivered`. |
+| **Step 3 — Later blocks** | One block at a time on user request. Each call fills the next `pending` placeholder row (does not append new rows). |
 | **Per-block size** | Prompt targets 2–4 paragraphs; hard cap `CONTENT_MAX_TOKENS` (900). |
 | **Cross-lesson context** | **Yes.** `curriculumBrief`, position in course, previous/next lesson titles, this lesson’s `objective`. |
-| **Within-lesson context** | **Summaries only** from prior blocks (`content_blocks.summary`), not full prior markdown. |
+| **Within-lesson context** | **Summaries only** from prior **delivered** blocks (`content_blocks.summary`), not full prior markdown. |
 | **Outline in prompt** | **Slim slice:** current, previous, and next block titles + index/count — not the full title list every time. |
-| **Audit** | Selective after all blocks: block 0 always; others if `shouldAutoAudit` heuristic matches; multiple blocks batched in one LLM call. |
-| **Resume** | If generation failed partway, redelivery skips blocks already `delivered` with non-empty content. |
+| **Audit** | Per block after it is generated: block 0 always; others if `shouldAutoAudit` heuristic matches (`auditContentBlock`). |
+| **Resume** | If block 0 failed partway, reopening the lesson retries via `generate-all`. Already-`delivered` blocks are never regenerated. |
 
-**Implication:** Cohesion within a lesson comes from summaries + slim outline; cohesion across lessons comes from the curriculum brief and positional context, without sending the entire syllabus JSON into every block prompt.
+**Implication:** Users see the lesson index and first section quickly; later sections stay cohesive via summaries + slim outline. Cross-lesson cohesion still comes from the curriculum brief and positional context, without sending the entire syllabus JSON into every block prompt.
 
-**Sources:** `src/lib/ai/generate-lesson-content.ts`, `src/lib/ai/lesson-context.ts`, `src/lib/ai/content-generator-stream.ts`, `src/app/api/lessons/[id]/content/generate-all/route.ts`
+**Sources:** `src/lib/ai/generate-lesson-content.ts`, `src/lib/ai/lesson-context.ts`, `src/lib/ai/content-generator-stream.ts`, `src/app/api/lessons/[id]/content/generate-all/route.ts`, `src/app/api/lessons/[id]/content/route.ts`, `src/app/lesson/[id]/page.tsx`
 
 ---
 
@@ -98,26 +100,33 @@ Normalized tables (`modules`, `lessons`) store only `title` and `order`; the JSO
 ```mermaid
 sequenceDiagram
     participant UI as Lesson page
-    participant API as generate-all
-    participant Gen as generateLessonContent
+    participant Init as generate-all
+    participant Next as content API
+    participant Gen as generate-lesson-content
     participant Ctx as getLessonGenerationContext
     participant Out as resolveLessonOutline
     participant Stream as streamContentBlock
     participant Sum as summarizeBlockContent
-    participant Aud as auditContentBlocksBatch
+    participant Aud as auditContentBlock
 
-    UI->>API: POST (no blocks or partial)
-    API->>Gen: lessonId
+    UI->>Init: POST (no delivered blocks)
+    Init->>Gen: generateLessonContent
     Gen->>Ctx: DB lesson + syllabus structure
     Gen->>Out: prebuilt or LLM outline
-    loop Each incomplete block
-        Gen->>Stream: summaries + slim outline + curriculum
-        Stream-->>Gen: markdown chunk stream
-        Gen->>Sum: full block text
-        Sum-->>Gen: summary stored on row
-    end
-    Gen->>Aud: blocks matching shouldAutoAudit
-    Aud-->>Gen: pass/fail per index
+    Gen->>Gen: create all block rows (index)
+    Gen->>Stream: block 0 only
+    Stream-->>Gen: markdown chunks
+    Gen->>Sum: full block text
+    Sum-->>Gen: summary stored on row
+    Gen->>Aud: block 0 if policy matches
+    UI->>UI: show index + section 1
+
+    UI->>Next: POST (user clicks Generate next section)
+    Next->>Gen: generateNextLessonBlock
+    Gen->>Stream: next pending block
+    Stream-->>Next: stream to client
+    Gen->>Sum: full block text
+    Gen->>Aud: per-block if policy matches
 ```
 
 ### Context assembly (`lesson-context.ts`)
@@ -152,12 +161,12 @@ After each block is written, a small `MODEL_STRUCTURED` call produces a factual 
 
 | Rule | Behavior |
 |------|----------|
-| Block 0 | Always auto-audited |
-| Blocks 1+ | Audited if content matches fact-heavy patterns (years, %, studies, medical terms, etc.) |
-| Batch | Multiple qualifying blocks → one `auditContentBlocksBatch` JSON call |
+| Block 0 | Always auto-audited after generation |
+| Blocks 1+ | Audited after generation if content matches fact-heavy patterns (years, %, studies, medical terms, etc.) |
+| Timing | One `auditContentBlock` call per generated block (not deferred to end of lesson) |
 | Manual | `POST /api/content-blocks/[id]/audit` always available |
 
-Audit never edits content; results go to `audit_results`.
+Audit never edits content; results go to `audit_results`. `auditContentBlocksBatch` remains available for batch/manual use but is not used in the default lesson flow.
 
 ---
 
@@ -186,15 +195,17 @@ Audit never edits content; results go to `audit_results`.
 ### Syllabus view — tree & progress
 
 - **Route:** `/syllabus/[id]`
-- **API:** `GET /api/syllabi/[id]` — modules, lessons, progress from `block_reads`.
+- **API:** `GET /api/syllabi/[id]` — modules, lessons, progress from `block_reads` (counts **delivered** blocks only).
 - **Q&A history:** `GET /api/syllabus/[id]/qa-history` — all Q&A in the syllabus (no AI).
 
 ### Lesson view — content blocks
 
 - **Route:** `/lesson/[id]`
-- **API:** `GET /api/lessons/[id]` — blocks, audit flag, read state, `moduleTitle`, `syllabusId`.
-- **Auto-generate:** `generate-all` when no blocks; shows loading until complete.
-- **Read tracking:** `PATCH /api/content-blocks/[id]/read` → lesson/syllabus progress %.
+- **API:** `GET /api/lessons/[id]` — all block rows (index + content), audit flag, read state, `moduleTitle`, `syllabusId`.
+- **Initial generate:** `generate-all` when no delivered blocks — creates the full index (pending rows) and generates block 0 only.
+- **On-demand generate:** **Generate next section** calls `POST /api/lessons/[id]/content` and streams the next pending block into its placeholder row.
+- **UI:** Lesson overview lists all planned sections; pending ones marked “not generated yet”. Only delivered blocks render as readable content.
+- **Read tracking:** `PATCH /api/content-blocks/[id]/read` → lesson/syllabus progress % (based on delivered blocks).
 
 ### Q&A (per block)
 
@@ -206,11 +217,11 @@ Audit never edits content; results go to `audit_results`.
 
 - Aggregates Q&A across all blocks in the syllabus with `lessonTitle` and `blockIndex`.
 
-### Alternate content API
+### Incremental content API
 
 - **Route:** `POST /api/lessons/[id]/content`
-- Streams **one** additional block (next index). Uses the same context stack: curriculum, slim outline, summaries, `max_tokens`, selective audit.
-- Not used by the main lesson page UI today; available for incremental delivery.
+- Finds the next `pending` block row, streams content into it, then summarizes and audits. Uses the same context stack: curriculum, slim outline, prior delivered summaries, `max_tokens`, selective audit.
+- Used by the lesson page **Generate next section** button.
 
 ### Data model
 
@@ -227,7 +238,7 @@ Subject → Syllabus (structure JSON) → Module → Lesson → ContentBlock
 |----------------|-------|
 | `syllabi.structure` | `SyllabusStructure` JSON (brief + per-lesson outlines) |
 | `content_blocks.summary` | Compact prior-block context; requires migration `0002_content_block_summary.sql` |
-| `content_blocks.status` | `pending` while generating; `delivered` when done |
+| `content_blocks.status` | `pending` for index placeholders and not-yet-generated sections; `delivered` when content exists |
 
 ---
 
@@ -261,25 +272,31 @@ flowchart TD
     C --> D{Prebuilt outline?}
     D -->|yes| E[resolveLessonOutline - no LLM]
     D -->|no| F[resolveLessonOutline - LLM]
-    E --> G[streamContentBlock x N]
+    E --> G[Create index rows + block 0]
     F --> G
-    G --> H[summarizeBlockContent x N]
-    H --> I{shouldAutoAudit?}
-    I --> J[auditContentBlocksBatch]
+    G --> H[streamContentBlock block 0]
+    H --> I[summarizeBlockContent]
+    I --> J{shouldAutoAudit block 0?}
+    J --> K[auditContentBlock]
 
-    K[User asks question] --> L[generateAnswer + qa-context]
+    L[User clicks Generate next section] --> M[generateNextLessonBlock]
+    M --> N[streamContentBlock next pending]
+    N --> O[summarize + audit per block]
+
+    P[User asks question] --> Q[generateAnswer + qa-context]
 ```
 
 | Step | Function | When skipped |
 |------|----------|--------------|
 | Syllabus | `generateSyllabus` | Never (per syllabus) |
 | Lesson outline | `resolveLessonOutline` | When `structure` has valid `blockCount` + `titles` |
-| Block content | `streamContentBlock` | Per block |
-| Summary | `summarizeBlockContent` | Per block (reused on resume if already stored) |
-| Audit | `auditContentBlocksBatch` | Blocks not matching policy |
+| Index rows | `ensureBlockRows` | When all rows already exist |
+| Block content | `streamContentBlock` | One block per user action (block 0 on open; rest on demand) |
+| Summary | `summarizeBlockContent` | After each generated block (reused if already stored) |
+| Audit | `auditContentBlock` | Blocks not matching policy |
 | Q&A | `generateAnswer` | On user question only |
 
-**Cost shape:** Syllabus creation is one large structured call. Each lesson is O(blocks) for content + summaries, O(1) outline call if not prebuilt, and O(audit candidates) for audit — with **O(n)** growing context per block (summaries), not O(n²) full text.
+**Cost shape:** Syllabus creation is one large structured call. Opening a lesson costs O(1) block generation plus outline/index setup. Each **Generate next section** adds one content + summary + optional audit call — with **O(k)** context where *k* is the number of already-delivered blocks (summaries), not O(n²) full text.
 
 ### Structured JSON (`invoke-json.ts`)
 
@@ -292,6 +309,7 @@ Syllabus, outline fallback, and audit use OpenAI JSON mode with Zod parse — no
 | Full prior block text in prompts | Token explosion on later blocks |
 | Full outline list in every block prompt | Redundant; replaced by slim slice |
 | Audit every block always | Cost; first block + fact-heavy heuristic + manual API |
+| Generating all blocks on lesson open | Long wait before any content; replaced by index + first block, then on demand |
 | Parallel block generation without shared summaries | Risk of repetition and contradiction |
 | Raw full `structure` JSON in every block prompt | Noise; curriculum brief + position instead |
 
@@ -327,15 +345,16 @@ No migration of old JSON is required; regenerate a syllabus to get the full pipe
 | Syllabus generation | `src/lib/ai/syllabus-generator.ts` |
 | Lesson context builder | `src/lib/ai/lesson-context.ts` |
 | Outline resolution | `src/lib/ai/resolve-lesson-outline.ts` |
-| Content orchestration | `src/lib/ai/generate-lesson-content.ts` |
+| Content orchestration | `src/lib/ai/generate-lesson-content.ts` (`generateLessonContent`, `generateBlockAtIndex`, `generateNextLessonBlock`) |
 | Content streaming | `src/lib/ai/content-generator-stream.ts` |
 | Block summaries | `src/lib/ai/block-summary.ts` |
 | Audit policy | `src/lib/ai/audit-policy.ts` |
 | Audit + batch | `src/lib/ai/audit-chain.ts` |
 | Q&A | `src/lib/ai/qa-generator.ts` |
 | Q&A context compression | `src/lib/ai/qa-context.ts` |
-| Generate-all API | `src/app/api/lessons/[id]/content/generate-all/route.ts` |
-| Stream-one-block API | `src/app/api/lessons/[id]/content/route.ts` |
+| Initial generate API | `src/app/api/lessons/[id]/content/generate-all/route.ts` |
+| On-demand block API | `src/app/api/lessons/[id]/content/route.ts` |
+| Lesson page UI | `src/app/lesson/[id]/page.tsx` |
 | Syllabus API | `src/app/api/subjects/[id]/syllabus/route.ts` |
 | DB schema | `src/lib/db/schema.ts` |
 | Auth | `src/lib/auth.ts`, `src/middleware.ts` |
