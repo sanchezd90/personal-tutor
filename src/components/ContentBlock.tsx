@@ -1,6 +1,8 @@
 "use client";
 
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { normalizeMarkdownForRender } from "@/lib/markdown/normalize";
 import { QASidebar } from "@/components/QASidebar";
 
 type ContentBlockProps = Readonly<{
@@ -47,8 +49,10 @@ export function ContentBlock({
             )}
           </div>
         </div>
-        <div className="prose prose-invert prose-slate max-w-none prose-p:text-slate-300 prose-headings:text-slate-100">
-          <ReactMarkdown>{content}</ReactMarkdown>
+        <div className="prose prose-invert prose-slate max-w-none prose-p:text-slate-300 prose-headings:text-slate-100 prose-table:text-slate-300 prose-th:text-slate-200 prose-td:border-slate-600 prose-th:border-slate-600">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            {normalizeMarkdownForRender(content)}
+          </ReactMarkdown>
         </div>
         {onReadToggle && (
           <div className="flex justify-end mt-6 pt-4 border-t border-slate-700">

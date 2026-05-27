@@ -72,6 +72,7 @@ Cover the planned topic exhaustively for certification readiness:
 - Field standards, conventions, or exam-relevant distinctions where applicable
 
 Use markdown with clear hierarchy (## / ###), bullet lists, tables, and code blocks when relevant. Structure long material into scannable sections rather than one wall of text.
+For markdown tables: each row on its own line (header, separator with |---|, then data rows). Never put multiple table rows on one line.
 Use the full length budget: aim for substantial multi-section content (roughly 3–6 booklet pages of teaching density), not a brief overview.
 Avoid filler: no throat-clearing ("In this section…"), motivational fluff, vague generalities, or repeating the lesson title.
 Every paragraph should teach something new. When a planned topic is provided, cover it completely within scope.
