@@ -38,19 +38,22 @@ export async function requireSyllabusOwnership(syllabusId: string, userId: strin
 }
 
 export async function requireLessonOwnership(lessonId: string, userId: string) {
-  const [lesson] = await db.select().from(lessons).where(eq(lessons.id, lessonId));
-  if (!lesson) return false;
-  const [mod] = await db.select().from(modules).where(eq(modules.id, lesson.moduleId));
-  if (!mod) return false;
-  const [syllabus] = await db.select().from(syllabi).where(eq(syllabi.id, mod.syllabusId));
-  return syllabus && syllabus.userId === userId;
+  const [row] = await db
+    .select({ ownerId: syllabi.userId })
+    .from(lessons)
+    .innerJoin(modules, eq(lessons.moduleId, modules.id))
+    .innerJoin(syllabi, eq(modules.syllabusId, syllabi.id))
+    .where(eq(lessons.id, lessonId));
+  return row?.ownerId === userId;
 }
 
 export async function requireContentBlockOwnership(contentBlockId: string, userId: string) {
-  const [block] = await db
-    .select()
+  const [row] = await db
+    .select({ ownerId: syllabi.userId })
     .from(contentBlocks)
+    .innerJoin(lessons, eq(contentBlocks.lessonId, lessons.id))
+    .innerJoin(modules, eq(lessons.moduleId, modules.id))
+    .innerJoin(syllabi, eq(modules.syllabusId, syllabi.id))
     .where(eq(contentBlocks.id, contentBlockId));
-  if (!block) return false;
-  return requireLessonOwnership(block.lessonId, userId);
+  return row?.ownerId === userId;
 }

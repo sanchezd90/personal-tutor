@@ -4,11 +4,12 @@ import {
   lessons,
   contentBlocks,
   modules,
+  syllabi,
   auditResults,
   blockReads,
 } from "@/lib/db/schema";
 import { eq, inArray, desc, and } from "drizzle-orm";
-import { requireAuth, requireLessonOwnership } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
 
 export async function GET(
   request: Request,
@@ -22,21 +23,27 @@ export async function GET(
   try {
     const { id: lessonId } = await params;
 
-    const [lesson] = await db.select().from(lessons).where(eq(lessons.id, lessonId));
+    const [lessonRow] = await db
+      .select({
+        lesson: lessons,
+        moduleTitle: modules.title,
+        syllabusId: modules.syllabusId,
+        ownerId: syllabi.userId,
+      })
+      .from(lessons)
+      .innerJoin(modules, eq(lessons.moduleId, modules.id))
+      .innerJoin(syllabi, eq(modules.syllabusId, syllabi.id))
+      .where(eq(lessons.id, lessonId));
 
-    if (!lesson) {
+    if (!lessonRow) {
       return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
     }
 
-    const owns = await requireLessonOwnership(lessonId, user.id);
-    if (!owns) {
+    if (lessonRow.ownerId !== user.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const [mod] = await db
-      .select()
-      .from(modules)
-      .where(eq(modules.id, lesson.moduleId));
+    const { lesson, moduleTitle, syllabusId } = lessonRow;
 
     const blocks = await db
       .select()
@@ -45,18 +52,30 @@ export async function GET(
       .orderBy(contentBlocks.blockIndex);
 
     const blockIds = blocks.map((b) => b.id);
-    const audits =
+
+    const [audits, readBlockIds] =
       blockIds.length > 0
-        ? await db
-            .select({
-              contentBlockId: auditResults.contentBlockId,
-              passed: auditResults.passed,
-              auditedAt: auditResults.auditedAt,
-            })
-            .from(auditResults)
-            .where(inArray(auditResults.contentBlockId, blockIds))
-            .orderBy(desc(auditResults.auditedAt))
-        : [];
+        ? await Promise.all([
+            db
+              .select({
+                contentBlockId: auditResults.contentBlockId,
+                passed: auditResults.passed,
+                auditedAt: auditResults.auditedAt,
+              })
+              .from(auditResults)
+              .where(inArray(auditResults.contentBlockId, blockIds))
+              .orderBy(desc(auditResults.auditedAt)),
+            db
+              .select({ contentBlockId: blockReads.contentBlockId })
+              .from(blockReads)
+              .where(
+                and(
+                  inArray(blockReads.contentBlockId, blockIds),
+                  eq(blockReads.userId, user.id)
+                )
+              ),
+          ])
+        : [[], []];
 
     const latestAuditByBlock = new Map<string, boolean>();
     for (const a of audits) {
@@ -65,18 +84,6 @@ export async function GET(
       }
     }
 
-    const readBlockIds =
-      blockIds.length > 0
-        ? await db
-            .select({ contentBlockId: blockReads.contentBlockId })
-            .from(blockReads)
-            .where(
-              and(
-                inArray(blockReads.contentBlockId, blockIds),
-                eq(blockReads.userId, user.id)
-              )
-            )
-        : [];
     const readSet = new Set(readBlockIds.map((r) => r.contentBlockId));
 
     const blocksWithAudit = blocks.map((block) => ({
@@ -87,8 +94,8 @@ export async function GET(
 
     return NextResponse.json({
       ...lesson,
-      moduleTitle: mod?.title,
-      syllabusId: mod?.syllabusId,
+      moduleTitle,
+      syllabusId,
       blocks: blocksWithAudit,
     });
   } catch (error) {

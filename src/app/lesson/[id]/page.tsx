@@ -123,14 +123,46 @@ export default function LessonPage() {
 
   async function handleReadToggle(blockId: string, read: boolean) {
     setTogglingRead(blockId);
+    setLesson((prev) =>
+      prev
+        ? {
+            ...prev,
+            blocks: prev.blocks.map((block) =>
+              block.id === blockId ? { ...block, read } : block
+            ),
+          }
+        : prev
+    );
     try {
       const res = await fetch(`/api/content-blocks/${blockId}/read`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ read }),
       });
-      if (res.ok) await fetchLesson();
+      if (!res.ok) {
+        setLesson((prev) =>
+          prev
+            ? {
+                ...prev,
+                blocks: prev.blocks.map((block) =>
+                  block.id === blockId ? { ...block, read: !read } : block
+                ),
+              }
+            : prev
+        );
+        setError("Failed to update read status");
+      }
     } catch {
+      setLesson((prev) =>
+        prev
+          ? {
+              ...prev,
+              blocks: prev.blocks.map((block) =>
+                block.id === blockId ? { ...block, read: !read } : block
+              ),
+            }
+          : prev
+      );
       setError("Failed to update read status");
     } finally {
       setTogglingRead(null);

@@ -32,23 +32,18 @@ export async function PATCH(
       );
     }
 
-    const existing = await db
-      .select()
-      .from(blockReads)
-      .where(
-        and(
-          eq(blockReads.contentBlockId, contentBlockId),
-          eq(blockReads.userId, user.id)
-        )
-      );
-
-    if (read && existing.length === 0) {
-      await db.insert(blockReads).values({
-        id: randomUUID(),
-        contentBlockId,
-        userId: user.id,
-      });
-    } else if (!read && existing.length > 0) {
+    if (read) {
+      await db
+        .insert(blockReads)
+        .values({
+          id: randomUUID(),
+          contentBlockId,
+          userId: user.id,
+        })
+        .onConflictDoNothing({
+          target: [blockReads.contentBlockId, blockReads.userId],
+        });
+    } else {
       await db
         .delete(blockReads)
         .where(
