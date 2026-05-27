@@ -4,7 +4,6 @@ import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { streamContentBlock, type SlimOutlineSlice } from "@/lib/ai/content-generator-stream";
 import { summarizeBlockContent } from "@/lib/ai/block-summary";
-import { shouldAutoAudit } from "@/lib/ai/audit-policy";
 import { auditContentBlock } from "@/lib/ai/audit-chain";
 import {
   formatCurriculumContext,
@@ -94,13 +93,10 @@ async function buildPreviousSummaries(
   return previousSummaries;
 }
 
-async function auditBlockIfNeeded(
+async function auditBlockAfterGeneration(
   blockId: string,
-  blockIndex: number,
   content: string
 ): Promise<void> {
-  if (!shouldAutoAudit(blockIndex, content)) return;
-
   try {
     const { passed, feedback } = await auditContentBlock(content);
     await db.insert(auditResults).values({
@@ -170,7 +166,7 @@ export async function generateBlockAtIndex(
     })
     .where(eq(contentBlocks.id, row.id));
 
-  await auditBlockIfNeeded(row.id, blockIndex, fullContent);
+  await auditBlockAfterGeneration(row.id, fullContent);
 
   return { blockId: row.id, content: fullContent };
 }

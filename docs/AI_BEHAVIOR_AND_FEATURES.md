@@ -53,7 +53,7 @@ This document describes how the app uses AI today: what controls syllabus and le
 | **Cross-lesson context** | **Yes.** `curriculumBrief`, position in course, previous/next lesson titles, this lesson’s `objective`. |
 | **Within-lesson context** | **Summaries only** from prior **delivered** blocks (`content_blocks.summary`), not full prior markdown. |
 | **Outline in prompt** | **Slim slice:** current, previous, and next block titles + index/count — not the full title list every time. |
-| **Audit** | Per block after it is generated: block 0 always; others if `shouldAutoAudit` heuristic matches (`auditContentBlock`). |
+| **Audit** | Every generated block is auto-audited after generation (`auditContentBlock`). |
 | **Resume** | If block 0 failed partway, reopening the lesson retries via `generate-all`. Already-`delivered` blocks are never regenerated. |
 
 **Implication:** Users see the lesson index and first section quickly; later sections stay cohesive via summaries + slim outline. Cross-lesson cohesion still comes from the curriculum brief and positional context, without sending the entire syllabus JSON into every block prompt.
@@ -118,7 +118,7 @@ sequenceDiagram
     Stream-->>Gen: markdown chunks
     Gen->>Sum: full block text
     Sum-->>Gen: summary stored on row
-    Gen->>Aud: block 0 if policy matches
+    Gen->>Aud: audit every generated block
     UI->>UI: show index + section 1
 
     UI->>Next: POST (user clicks Generate next section)
@@ -126,7 +126,7 @@ sequenceDiagram
     Gen->>Stream: next pending block
     Stream-->>Next: stream to client
     Gen->>Sum: full block text
-    Gen->>Aud: per-block if policy matches
+    Gen->>Aud: per-block audit
 ```
 
 ### Context assembly (`lesson-context.ts`)
@@ -157,12 +157,11 @@ System prompt instructs: stay scoped to this block, align with course position, 
 
 After each block is written, a small `MODEL_STRUCTURED` call produces a factual summary (`SUMMARY_MAX_TOKENS` 150). Stored in `content_blocks.summary` for resume and next-block context.
 
-### Audit (`audit-policy.ts` + `audit-chain.ts`)
+### Audit (`audit-chain.ts`)
 
 | Rule | Behavior |
 |------|----------|
-| Block 0 | Always auto-audited after generation |
-| Blocks 1+ | Audited after generation if content matches fact-heavy patterns (years, %, studies, medical terms, etc.) |
+| All blocks | Auto-audited after each block is generated |
 | Timing | One `auditContentBlock` call per generated block (not deferred to end of lesson) |
 | Manual | `POST /api/content-blocks/[id]/audit` always available |
 
@@ -220,7 +219,7 @@ Audit never edits content; results go to `audit_results`. `auditContentBlocksBat
 ### Incremental content API
 
 - **Route:** `POST /api/lessons/[id]/content`
-- Finds the next `pending` block row, streams content into it, then summarizes and audits. Uses the same context stack: curriculum, slim outline, prior delivered summaries, `max_tokens`, selective audit.
+- Finds the next `pending` block row, streams content into it, then summarizes and audits. Uses the same context stack: curriculum, slim outline, prior delivered summaries, `max_tokens`, and per-block audit.
 - Used by the lesson page **Generate next section** button.
 
 ### Data model
@@ -276,12 +275,11 @@ flowchart TD
     F --> G
     G --> H[streamContentBlock block 0]
     H --> I[summarizeBlockContent]
-    I --> J{shouldAutoAudit block 0?}
-    J --> K[auditContentBlock]
+    I --> J[auditContentBlock]
 
     L[User clicks Generate next section] --> M[generateNextLessonBlock]
     M --> N[streamContentBlock next pending]
-    N --> O[summarize + audit per block]
+    N --> O[summarize + audit each block]
 
     P[User asks question] --> Q[generateAnswer + qa-context]
 ```
@@ -293,10 +291,10 @@ flowchart TD
 | Index rows | `ensureBlockRows` | When all rows already exist |
 | Block content | `streamContentBlock` | One block per user action (block 0 on open; rest on demand) |
 | Summary | `summarizeBlockContent` | After each generated block (reused if already stored) |
-| Audit | `auditContentBlock` | Blocks not matching policy |
+| Audit | `auditContentBlock` | After each generated block |
 | Q&A | `generateAnswer` | On user question only |
 
-**Cost shape:** Syllabus creation is one large structured call. Opening a lesson costs O(1) block generation plus outline/index setup. Each **Generate next section** adds one content + summary + optional audit call — with **O(k)** context where *k* is the number of already-delivered blocks (summaries), not O(n²) full text.
+**Cost shape:** Syllabus creation is one large structured call. Opening a lesson costs O(1) block generation plus outline/index setup. Each **Generate next section** adds one content + summary + audit call — with **O(k)** context where *k* is the number of already-delivered blocks (summaries), not O(n²) full text.
 
 ### Structured JSON (`invoke-json.ts`)
 
@@ -308,7 +306,6 @@ Syllabus, outline fallback, and audit use OpenAI JSON mode with Zod parse — no
 |---------|-----|
 | Full prior block text in prompts | Token explosion on later blocks |
 | Full outline list in every block prompt | Redundant; replaced by slim slice |
-| Audit every block always | Cost; first block + fact-heavy heuristic + manual API |
 | Generating all blocks on lesson open | Long wait before any content; replaced by index + first block, then on demand |
 | Parallel block generation without shared summaries | Risk of repetition and contradiction |
 | Raw full `structure` JSON in every block prompt | Noise; curriculum brief + position instead |
@@ -348,7 +345,6 @@ No migration of old JSON is required; regenerate a syllabus to get the full pipe
 | Content orchestration | `src/lib/ai/generate-lesson-content.ts` (`generateLessonContent`, `generateBlockAtIndex`, `generateNextLessonBlock`) |
 | Content streaming | `src/lib/ai/content-generator-stream.ts` |
 | Block summaries | `src/lib/ai/block-summary.ts` |
-| Audit policy | `src/lib/ai/audit-policy.ts` |
 | Audit + batch | `src/lib/ai/audit-chain.ts` |
 | Q&A | `src/lib/ai/qa-generator.ts` |
 | Q&A context compression | `src/lib/ai/qa-context.ts` |
