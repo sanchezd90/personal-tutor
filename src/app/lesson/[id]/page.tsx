@@ -5,6 +5,10 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ContentBlock } from "@/components/ContentBlock";
 import { QASidebar } from "@/components/QASidebar";
+import {
+  blockAnchorId,
+  parseBlockIndexFromHash,
+} from "@/lib/block-navigation";
 
 type Block = {
   id: string;
@@ -67,6 +71,43 @@ export default function LessonPage() {
   useEffect(() => {
     fetchLesson();
   }, [fetchLesson]);
+
+  const scrollToBlock = useCallback(
+    (blockIndex: number, blockId?: string) => {
+      const anchor = blockAnchorId(blockIndex);
+      const element = document.getElementById(anchor);
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      if (blockId) {
+        setSelectedBlockId(blockId);
+      }
+      window.history.replaceState(null, "", `#${anchor}`);
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!lesson || loading || generatingInitial) return;
+
+    const scrollFromHash = () => {
+      const blockIndex = parseBlockIndexFromHash(window.location.hash);
+      if (blockIndex == null) return;
+
+      const block = lesson.blocks.find(
+        (item) => item.blockIndex === blockIndex && isDeliveredBlock(item)
+      );
+      if (!block) return;
+
+      requestAnimationFrame(() => {
+        scrollToBlock(block.blockIndex, block.id);
+      });
+    };
+
+    scrollFromHash();
+    window.addEventListener("hashchange", scrollFromHash);
+    return () => window.removeEventListener("hashchange", scrollFromHash);
+  }, [lesson, loading, generatingInitial, scrollToBlock]);
 
   useEffect(() => {
     if (!lesson || loading || generatingInitial) return;
@@ -230,11 +271,13 @@ export default function LessonPage() {
             >
               <summary className="px-4 py-3 cursor-pointer font-medium text-slate-200 hover:bg-slate-700/50">
                 Lesson overview ({deliveredBlocks.length} of {totalOutlineBlocks}{" "}
-                section{totalOutlineBlocks === 1 ? "" : "s"} ready)
+                section{totalOutlineBlocks === 1 ? "" : "s"} generated)
               </summary>
               <ol className="list-decimal list-inside divide-y divide-slate-700/50 px-4 py-2">
                 {lesson.blocks.map((block) => {
                   const ready = isDeliveredBlock(block);
+                  const title = block.title ?? `Block ${block.blockIndex + 1}`;
+
                   return (
                     <li
                       key={block.id}
@@ -242,8 +285,20 @@ export default function LessonPage() {
                         ready ? "text-slate-300" : "text-slate-500 italic"
                       }`}
                     >
-                      {block.title ?? `Block ${block.blockIndex + 1}`}
-                      {!ready && " (not generated yet)"}
+                      {ready ? (
+                        <a
+                          href={`#${blockAnchorId(block.blockIndex)}`}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            scrollToBlock(block.blockIndex, block.id);
+                          }}
+                          className="text-emerald-400 hover:text-emerald-300 hover:underline"
+                        >
+                          {title}
+                        </a>
+                      ) : (
+                        title
+                      )}                      
                     </li>
                   );
                 })}
@@ -252,24 +307,29 @@ export default function LessonPage() {
           )}
 
           {deliveredBlocks.map((block) => (
-            <button
+            <div
               key={block.id}
-              type="button"
-              onClick={() => setSelectedBlockId(block.id)}
-              className="w-full text-left cursor-pointer block"
+              id={blockAnchorId(block.blockIndex)}
+              className="scroll-mt-8"
             >
-              <ContentBlock
-                content={block.content}
-                blockNumber={block.blockIndex + 1}
-                title={block.title}
-                blockId={block.id}
-                auditPassed={block.auditPassed ?? null}
-                read={block.read ?? false}
-                onReadToggle={
-                  togglingRead === block.id ? undefined : handleReadToggle
-                }
-              />
-            </button>
+              <button
+                type="button"
+                onClick={() => setSelectedBlockId(block.id)}
+                className="w-full text-left cursor-pointer block"
+              >
+                <ContentBlock
+                  content={block.content}
+                  blockNumber={block.blockIndex + 1}
+                  title={block.title}
+                  blockId={block.id}
+                  auditPassed={block.auditPassed ?? null}
+                  read={block.read ?? false}
+                  onReadToggle={
+                    togglingRead === block.id ? undefined : handleReadToggle
+                  }
+                />
+              </button>
+            </div>
           ))}
 
           {streamingBlock && (

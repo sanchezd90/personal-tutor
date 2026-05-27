@@ -156,7 +156,7 @@ export default function SyllabusPage() {
               />
             )}
 
-            <SyllabusTree syllabusId={syllabus.id} modules={syllabus.modules} />
+            <SyllabusTree modules={syllabus.modules} />
           </>
         )}
       </div>

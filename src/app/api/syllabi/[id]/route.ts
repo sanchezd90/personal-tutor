@@ -1,14 +1,9 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import {
-  syllabi,
-  modules,
-  lessons,
-  contentBlocks,
-  blockReads,
-} from "@/lib/db/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { syllabi, modules } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import { requireAuth, requireSyllabusOwnership } from "@/lib/auth";
+import { enrichModulesWithProgress } from "@/lib/progress";
 
 export async function DELETE(
   request: Request,
@@ -64,82 +59,19 @@ export async function GET(
       return NextResponse.json({ error: "Syllabus not found" }, { status: 404 });
     }
 
-    const modulesWithLessons = await db
+    const moduleList = await db
       .select()
       .from(modules)
       .where(eq(modules.syllabusId, syllabusId))
       .orderBy(modules.order);
 
-    const lessonsByModule = await Promise.all(
-      modulesWithLessons.map(async (mod) => {
-        const lessonList = await db
-          .select()
-          .from(lessons)
-          .where(eq(lessons.moduleId, mod.id))
-          .orderBy(lessons.order);
-
-        const lessonsWithProgress = await Promise.all(
-          lessonList.map(async (lesson) => {
-            const blocks = await db
-              .select({
-                id: contentBlocks.id,
-                status: contentBlocks.status,
-                content: contentBlocks.content,
-              })
-              .from(contentBlocks)
-              .where(eq(contentBlocks.lessonId, lesson.id));
-            const deliveredBlocks = blocks.filter(
-              (b) => b.status === "delivered" && b.content.trim().length > 0
-            );
-            const blockIds = deliveredBlocks.map((b) => b.id);
-            const totalBlocks = blockIds.length;
-
-            let readCount = 0;
-            if (blockIds.length > 0) {
-              const reads = await db
-                .select()
-                .from(blockReads)
-                .where(
-                  and(
-                    inArray(blockReads.contentBlockId, blockIds),
-                    eq(blockReads.userId, user.id)
-                  )
-                );
-              readCount = reads.length;
-            }
-
-            const progressPct =
-              totalBlocks > 0 ? Math.round((readCount / totalBlocks) * 100) : 0;
-            const isDone = totalBlocks > 0 && progressPct === 100;
-
-            return {
-              ...lesson,
-              progressPct,
-              isDone,
-              readCount,
-              totalBlocks,
-            };
-          })
-        );
-
-        return { ...mod, lessons: lessonsWithProgress };
-      })
-    );
-
-    const allLessons = lessonsByModule.flatMap((m) => m.lessons);
-    const doneLessons = allLessons.filter((l) => l.isDone).length;
-    const totalLessons = allLessons.length;
-    const syllabusProgressPct =
-      totalLessons > 0 ? Math.round((doneLessons / totalLessons) * 100) : 0;
-    const syllabusIsDone = totalLessons > 0 && syllabusProgressPct === 100;
+    const { modules: modulesWithLessons, ...progress } =
+      await enrichModulesWithProgress(moduleList, user.id, syllabus.structure);
 
     return NextResponse.json({
       ...syllabus,
-      modules: lessonsByModule,
-      progressPct: syllabusProgressPct,
-      isDone: syllabusIsDone,
-      doneLessons,
-      totalLessons,
+      modules: modulesWithLessons,
+      ...progress,
     });
   } catch (error) {
     console.error("Error fetching syllabus:", error);

@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { syllabi, subjects } from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth";
+import { computeSyllabusProgressSummaries } from "@/lib/progress";
 
 export async function GET() {
   const { user, error: authError } = await requireAuth();
@@ -23,7 +24,17 @@ export async function GET() {
       .where(eq(syllabi.userId, user.id))
       .orderBy(desc(syllabi.createdAt));
 
-    return NextResponse.json(userSyllabi);
+    const progressBySyllabus = await computeSyllabusProgressSummaries(
+      userSyllabi.map((syllabus) => syllabus.id),
+      user.id
+    );
+
+    const syllabiWithProgress = userSyllabi.map((syllabus) => ({
+      ...syllabus,
+      ...progressBySyllabus.get(syllabus.id)!,
+    }));
+
+    return NextResponse.json(syllabiWithProgress);
   } catch (error) {
     console.error("Error fetching syllabi:", error);
     return NextResponse.json(

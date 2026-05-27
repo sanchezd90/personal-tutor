@@ -10,6 +10,10 @@ type SyllabusItem = {
   subjectId: string;
   subjectName: string;
   createdAt: string;
+  progressPct?: number;
+  isDone?: boolean;
+  doneLessons?: number;
+  totalLessons?: number;
 };
 
 export default function Home() {
@@ -106,10 +110,26 @@ export default function Home() {
                     href={`/syllabus/${s.id}`}
                     className="flex-1 px-4 py-3 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 transition-colors"
                   >
-                    <span className="font-medium">{s.subjectName}</span>
-                    <span className="text-slate-400 text-sm ml-2">
-                      — {new Date(s.createdAt).toLocaleDateString()}
-                    </span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium">{s.subjectName}</span>
+                      {s.isDone && (
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-medium">
+                          Done
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mt-1 text-sm text-slate-400">
+                      <span>{new Date(s.createdAt).toLocaleDateString()}</span>
+                      {s.totalLessons != null && s.totalLessons > 0 && (
+                        <>
+                          <span>·</span>
+                          <span>
+                            {s.progressPct ?? 0}% complete ({s.doneLessons ?? 0}/
+                            {s.totalLessons} lessons)
+                          </span>
+                        </>
+                      )}
+                    </div>
                   </Link>
                   <button
                     onClick={async (e) => {
