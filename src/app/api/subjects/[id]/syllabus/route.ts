@@ -27,7 +27,20 @@ export async function POST(
       return NextResponse.json({ error: "Subject not found" }, { status: 404 });
     }
 
-    const structure = await generateSyllabus(subject.name);
+    let topicsDescription: string | undefined;
+    try {
+      const body = await request.json();
+      if (
+        typeof body?.topicsDescription === "string" &&
+        body.topicsDescription.trim()
+      ) {
+        topicsDescription = body.topicsDescription.trim();
+      }
+    } catch {
+      // empty or non-JSON body is fine
+    }
+
+    const structure = await generateSyllabus(subject.name, topicsDescription);
 
     const syllabusId = randomUUID();
     await db.insert(syllabi).values({

@@ -22,9 +22,9 @@ This document describes how the app uses AI today: what controls syllabus and le
 
 | Aspect | Behavior |
 |--------|----------|
-| **User input** | Subject name only (free text on the home page). No depth, duration, level, or module count. |
-| **Trigger** | `POST /api/subjects/[id]/syllabus` after creating a subject; the subject page auto-generates if no syllabus exists. |
-| **AI input** | `subject.name` only. |
+| **User input** | Subject name (home page). Optional **topics to include** textarea on the subject page before generation (depth, areas to cover or skip, etc.). No duration, level, or module count. |
+| **Trigger** | User clicks **Generate Syllabus** on the subject page (`POST /api/subjects/[id]/syllabus`). |
+| **AI input** | `subject.name` plus optional `topicsDescription` from the request body. |
 | **AI model** | `MODEL_STRUCTURED` (`gpt-4o-mini`), JSON via `invoke-json.ts` (`response_format: json_object`). |
 | **Extent (modules / lessons)** | Model-decided. Prompt asks for a comprehensive, progressive syllabus. |
 | **Per-lesson plan** | Each lesson includes `objective`, `blockCount` (3–12), and block `titles[]` for later content generation. |
