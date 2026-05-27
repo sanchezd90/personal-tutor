@@ -11,8 +11,8 @@ export async function summarizeBlockContent(content: string): Promise<string> {
 
   const response = await model.invoke([
     new SystemMessage(
-      `Summarize the educational content below in 50-120 words for use as context when writing the next section.
-List only concepts and facts already stated. Do not add new information, examples, or opinions.`
+      `Summarize the educational content below in 150-280 words for use as context when writing the next section.
+Capture key definitions, mechanisms, examples, and distinctions already stated. Do not add new information, examples, or opinions.`
     ),
     new HumanMessage(content),
   ]);

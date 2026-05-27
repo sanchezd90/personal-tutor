@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  LESSON_BLOCKS_MAX,
+  LESSON_BLOCKS_MIN,
+} from "@/lib/ai/course-structure";
 import { invokeJson } from "@/lib/ai/invoke-json";
 import { MODEL_STRUCTURED } from "@/lib/ai/models";
 import {
@@ -8,7 +12,7 @@ import {
 import type { LessonOutline } from "@/lib/ai/syllabus-types";
 
 const lessonOutlineSchema = z.object({
-  blockCount: z.number().min(3).max(12),
+  blockCount: z.number().min(LESSON_BLOCKS_MIN).max(LESSON_BLOCKS_MAX),
   titles: z.array(z.string()),
 });
 
@@ -31,9 +35,9 @@ export async function resolveLessonOutline(
 
   const result = await invokeJson(
     lessonOutlineSchema,
-    `You are an expert educational curriculum designer. Create a lesson block outline.
-Return JSON: { "blockCount": number (3-12), "titles": string[] } with titles.length === blockCount.
-Each title: 2-8 words, one concept per block.`,
+    `You are an expert educational curriculum designer. Create a daily lesson block outline for a certificate-level course.
+Return JSON: { "blockCount": number (${LESSON_BLOCKS_MIN}-${LESSON_BLOCKS_MAX}), "titles": string[] } with titles.length === blockCount.
+Each title: 3-10 words, one major concept or activity per block. Order blocks for a full study session (concept → examples → application → pitfalls → wrap-up where appropriate).`,
     `Lesson: ${ctx.lessonTitle}\n\n${curriculum}`,
     { model: MODEL_STRUCTURED, temperature: 0.6 }
   );

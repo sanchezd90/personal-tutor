@@ -22,17 +22,17 @@ This document describes how the app uses AI today: what controls syllabus and le
 
 | Aspect | Behavior |
 |--------|----------|
-| **User input** | Subject name (home page). Optional **topics to include** textarea on the subject page before generation (depth, areas to cover or skip, etc.). No duration, level, or module count. |
+| **User input** | Subject name (home page). Optional **topics to include** textarea on the subject page (focus areas, exam alignment, prerequisites, etc.). |
 | **Trigger** | User clicks **Generate Syllabus** on the subject page (`POST /api/subjects/[id]/syllabus`). |
 | **AI input** | `subject.name` plus optional `topicsDescription` from the request body. |
-| **AI model** | `MODEL_STRUCTURED` (`gpt-4o-mini`), JSON via `invoke-json.ts` (`response_format: json_object`). |
-| **Extent (modules / lessons)** | Model-decided. Prompt asks for a comprehensive, progressive syllabus. |
-| **Per-lesson plan** | Each lesson includes `objective`, `blockCount` (3–12), and block `titles[]` for later content generation. |
-| **Course-wide context** | `curriculumBrief` (150–250 words): goals, progression, how modules fit together. |
-| **Hard limits** | Block count per lesson: 3–12 (Zod). No cap on module or lesson counts. |
+| **AI model** | `MODEL_STRUCTURED` (`gpt-4o-mini`), JSON via `invoke-json.ts` (`response_format: json_object`), `SYLLABUS_MAX_TOKENS` (16000). |
+| **Extent (modules / lessons)** | **Fixed calendar shape:** 4 modules (weeks) × 5–7 lessons (study days). Zod enforces `modules.length === 4` and lessons per module in range. |
+| **Per-lesson plan** | Each lesson includes `objective` (1–2 sentences, certification depth), `blockCount` (4–10), and block `titles[]` for later content generation. |
+| **Course-wide context** | `curriculumBrief` (300–500 words): certificate outcomes, weekly arc, assessment readiness, progression. |
+| **Hard limits** | Modules: exactly 4. Lessons per module: 5–7. Blocks per lesson: 4–10 (Zod). See `src/lib/ai/course-structure.ts`. |
 | **Persistence** | Full `SyllabusStructure` in `syllabi.structure` (JSON) plus normalized `modules` and `lessons` rows (titles only in DB). |
 
-**Implication:** One heavier syllabus call upfront replaces many small outline calls later and gives every lesson a shared course narrative.
+**Implication:** One large syllabus call upfront (~20–28 lessons) replaces many small outline calls later and gives every lesson a shared certificate-level narrative.
 
 **Sources:** `src/lib/ai/syllabus-generator.ts`, `src/lib/ai/syllabus-types.ts`, `src/app/api/subjects/[id]/syllabus/route.ts`
 
@@ -49,7 +49,7 @@ This document describes how the app uses AI today: what controls syllabus and le
 | **Step 1 — Outline / index** | `resolveLessonOutline(ctx)`: use prebuilt outline from `syllabi.structure` when valid; otherwise one LLM call. All block rows are created upfront (`status: pending`, titles from outline) so the lesson index is visible immediately. |
 | **Step 2 — First block** | On initial open, only block 0 is generated: `streamContentBlock` → `summarizeBlockContent` → save `content` + `summary` → `status: delivered`. |
 | **Step 3 — Later blocks** | One block at a time on user request. Each call fills the next `pending` placeholder row (does not append new rows). |
-| **Per-block size** | Prompt targets 2–4 paragraphs; hard cap `CONTENT_MAX_TOKENS` (900). |
+| **Per-block size** | Prompt targets certificate-depth, multi-section content (~3–6 booklet pages of density); hard cap `CONTENT_MAX_TOKENS` (6000). |
 | **Cross-lesson context** | **Yes.** `curriculumBrief`, position in course, previous/next lesson titles, this lesson’s `objective`. |
 | **Within-lesson context** | **Summaries only** from prior **delivered** blocks (`content_blocks.summary`), not full prior markdown. |
 | **Outline in prompt** | **Slim slice:** current, previous, and next block titles + index/count — not the full title list every time. |
@@ -68,7 +68,7 @@ New syllabi persist this shape in `syllabi.structure` (validated at generation t
 
 ```json
 {
-  "curriculumBrief": "150-250 word course overview and progression...",
+  "curriculumBrief": "300-500 word certificate-level course overview...",
   "modules": [
     {
       "title": "Module title",
@@ -151,11 +151,11 @@ Each call receives:
 | `previousSummaries` | What earlier blocks already taught (50–120 words each) |
 | `curriculumContext` | Brief + position + neighbors + objective |
 
-System prompt instructs: stay scoped to this block, align with course position, do not steal topics from later lessons.
+System prompt instructs: fact-dense prose, no filler, stay scoped to this block, align with course position, do not steal topics from later lessons.
 
 ### Summaries (`block-summary.ts`)
 
-After each block is written, a small `MODEL_STRUCTURED` call produces a factual summary (`SUMMARY_MAX_TOKENS` 150). Stored in `content_blocks.summary` for resume and next-block context.
+After each block is written, a small `MODEL_STRUCTURED` call produces a factual summary (`SUMMARY_MAX_TOKENS` 450, prompt target 150–280 words). Stored in `content_blocks.summary` for resume and next-block context.
 
 ### Audit (`audit-chain.ts`)
 
@@ -209,7 +209,7 @@ Audit never edits content; results go to `audit_results`. `auditContentBlocksBat
 ### Q&A (per block)
 
 - **POST** `/api/content-blocks/[id]/questions` → `generateAnswer(block.content, question)`.
-- **Context:** Full block if ≤ `QA_FULL_CONTENT_THRESHOLD` (2000 chars); otherwise `selectRelevantContext()` picks paragraphs by keyword overlap with the question (`qa-context.ts`).
+- **Context:** Full block if ≤ `QA_FULL_CONTENT_THRESHOLD` (12000 chars); otherwise `selectRelevantContext()` picks paragraphs by keyword overlap with the question (`qa-context.ts`).
 - **Model:** `MODEL_STRUCTURED`, temperature `0.3`.
 
 ### Q&A history (syllabus level)
@@ -248,17 +248,27 @@ Subject → Syllabus (structure JSON) → Module → Lesson → ContentBlock
 | Constant | Model | Used for |
 |----------|-------|----------|
 | `MODEL_STRUCTURED` | `gpt-4o-mini` | Syllabus, outlines, summaries, audit, Q&A |
-| `MODEL_CONTENT` | `gpt-4o-mini` | Block prose (streaming) |
+| `MODEL_CONTENT` | `gpt-4.1` | Block prose (streaming) |
 
-Both tiers use the same model id today; constants allow splitting later without prompt changes.
+Structured tasks stay on the cheaper tier; lesson blocks use the higher-quality model.
 
 ### Token limits
 
 | Constant | Value | Role |
 |----------|-------|------|
-| `CONTENT_MAX_TOKENS` | 900 | Cap per content block |
-| `SUMMARY_MAX_TOKENS` | 150 | Cap per block summary |
-| `QA_FULL_CONTENT_THRESHOLD` | 2000 | When to compress Q&A input |
+| `CONTENT_MAX_TOKENS` | 6000 | Cap per content block (booklet-depth sections) |
+| `SUMMARY_MAX_TOKENS` | 450 | Cap per block summary |
+| `SYLLABUS_MAX_TOKENS` | 16000 | Cap for syllabus JSON generation |
+| `QA_FULL_CONTENT_THRESHOLD` | 12000 | When to compress Q&A input |
+| `AUDIT_BATCH_CONTENT_CHARS` | 8000 | Batch audit truncation per block |
+
+### Course shape (`course-structure.ts`)
+
+| Constant | Value |
+|----------|-------|
+| `COURSE_WEEKS` | 4 (one module per week) |
+| `LESSONS_PER_WEEK_MIN` / `MAX` | 5 / 7 (one lesson per study day) |
+| `LESSON_BLOCKS_MIN` / `MAX` | 4 / 10 (sections per daily lesson) |
 
 ### Call graph (typical new syllabus + one lesson)
 
@@ -336,6 +346,7 @@ No migration of old JSON is required; regenerate a syllabus to get the full pipe
 
 | Area | Path |
 |------|------|
+| Course shape constants | `src/lib/ai/course-structure.ts` |
 | Model constants | `src/lib/ai/models.ts` |
 | JSON LLM helper | `src/lib/ai/invoke-json.ts` |
 | Syllabus types / schema | `src/lib/ai/syllabus-types.ts` |

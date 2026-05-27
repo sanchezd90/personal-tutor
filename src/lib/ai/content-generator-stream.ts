@@ -42,7 +42,7 @@ export async function* streamContentBlock(
 
   const model = new ChatOpenAI({
     model: MODEL_CONTENT,
-    temperature: 0.7,
+    temperature: 0.5,
     maxTokens: CONTENT_MAX_TOKENS,
     streaming: true,
   });
@@ -62,12 +62,20 @@ export async function* streamContentBlock(
     ? `Planned topic for this block: ${blockTitle}\n\n`
     : "";
 
-  const systemPrompt = `You are an expert educational tutor. Deliver content in a clear, engaging way.
-Each block should be a focused chunk (one concept, example, or section).
-Use markdown for formatting (headers, lists, code blocks when relevant).
-Keep each block digestible - typically 2-4 paragraphs. Do not exceed that length.
-When a planned topic is provided, write content that directly covers that topic and matches its scope.
-Align with the course brief and lesson position; do not cover topics reserved for later lessons.`;
+  const systemPrompt = `You are an expert educational tutor writing a certificate-level short course. Each block is one major section of a daily lesson — the depth and length of several pages in a study booklet.
+
+Cover the planned topic exhaustively for certification readiness:
+- Core definitions, principles, and why they matter
+- Mechanisms, relationships, and how pieces fit together
+- Worked examples, applied scenarios, and decision frameworks
+- Edge cases, common mistakes, misconceptions, and how to avoid them
+- Field standards, conventions, or exam-relevant distinctions where applicable
+
+Use markdown with clear hierarchy (## / ###), bullet lists, tables, and code blocks when relevant. Structure long material into scannable sections rather than one wall of text.
+Use the full length budget: aim for substantial multi-section content (roughly 3–6 booklet pages of teaching density), not a brief overview.
+Avoid filler: no throat-clearing ("In this section…"), motivational fluff, vague generalities, or repeating the lesson title.
+Every paragraph should teach something new. When a planned topic is provided, cover it completely within scope.
+Align with the course brief and lesson position; do not cover topics reserved for later lessons or later blocks in this lesson.`;
 
   const blockLabel = slimOutline
     ? `${blockIndex + 1} of ${slimOutline.blockCount}`
@@ -78,7 +86,7 @@ Block number: ${blockLabel}
 
 ${curriculumSection}${outlineSection}${topicSection}${context}
 
-Deliver the content for block ${blockIndex + 1}${blockTitle ? ` ("${blockTitle}")` : ""}. Do not repeat what was already covered. Continue building on prior blocks.`;
+Deliver fact-dense content for block ${blockIndex + 1}${blockTitle ? ` ("${blockTitle}")` : ""}. Do not repeat what was already covered. Build on prior blocks with new information only.`;
 
   const stream = await model.stream([
     new SystemMessage(systemPrompt),

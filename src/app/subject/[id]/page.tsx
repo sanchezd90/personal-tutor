@@ -190,8 +190,8 @@ export default function SubjectPage() {
         <div className="py-8">
           <p className="text-slate-400 mb-6">
             {generating && "Generating your syllabus... This may take several seconds."}
-            {!generating && syllabi.length === 0 && "No syllabus yet. Optionally describe what you want covered, then generate one with AI."}
-            {!generating && syllabi.length > 0 && "Generate another syllabus for this subject."}
+            {!generating && syllabi.length === 0 && "No syllabus yet. Generation builds a four-week, certificate-depth course (one module per week, one lesson per study day). Optionally describe focus areas below."}
+            {!generating && syllabi.length > 0 && "Generate another four-week syllabus for this subject."}
           </p>
           <div className="space-y-4 max-w-xl">
             <label className="block text-left">
@@ -202,7 +202,7 @@ export default function SubjectPage() {
               <textarea
                 value={topicsDescription}
                 onChange={(e) => setTopicsDescription(e.target.value)}
-                placeholder="e.g. focus on eigenvalues and diagonalization, skip proofs; or beginner Spanish for travel"
+                placeholder="e.g. align to AWS Solutions Architect domains; emphasize hands-on labs in week 3–4; assume intermediate Python"
                 rows={4}
                 disabled={generating}
                 className="mt-2 w-full px-4 py-3 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-y disabled:opacity-50"

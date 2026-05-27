@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { invokeJson } from "@/lib/ai/invoke-json";
-import { MODEL_STRUCTURED } from "@/lib/ai/models";
+import { AUDIT_BATCH_CONTENT_CHARS, MODEL_STRUCTURED } from "@/lib/ai/models";
 
 const auditSchema = z.object({
   passed: z.boolean(),
@@ -46,7 +46,7 @@ export async function auditContentBlocksBatch(
   const numbered = blocks
     .map(
       (b, i) =>
-        `--- Block ${i} (index ${b.index}) ---\n${b.content.slice(0, 4000)}`
+        `--- Block ${i} (index ${b.index}) ---\n${b.content.slice(0, AUDIT_BATCH_CONTENT_CHARS)}`
     )
     .join("\n\n");
 
