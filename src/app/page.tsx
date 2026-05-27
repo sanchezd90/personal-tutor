@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import { createClient } from "@/lib/supabase/client";
 
 type SyllabusItem = {
@@ -23,6 +24,8 @@ export default function Home() {
   const [subject, setSubject] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [syllabusToDelete, setSyllabusToDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -67,6 +70,24 @@ export default function Home() {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function confirmDeleteSyllabus() {
+    if (!syllabusToDelete) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/syllabi/${syllabusToDelete}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setSyllabusToDelete(null);
+        await fetchSyllabi();
+      }
+    } catch {
+      // ignore
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -132,17 +153,9 @@ export default function Home() {
                     </div>
                   </Link>
                   <button
-                    onClick={async (e) => {
+                    onClick={(e) => {
                       e.preventDefault();
-                      if (!confirm("Delete this syllabus?")) return;
-                      try {
-                        const res = await fetch(`/api/syllabi/${s.id}`, {
-                          method: "DELETE",
-                        });
-                        if (res.ok) fetchSyllabi();
-                      } catch {
-                        // ignore
-                      }
+                      setSyllabusToDelete(s.id);
                     }}
                     className="px-3 py-2 rounded-lg text-red-400 hover:bg-red-900/30 opacity-0 group-hover:opacity-100 transition-opacity"
                     title="Delete syllabus"
@@ -196,6 +209,18 @@ export default function Home() {
           <p className="mt-4 text-red-400 text-sm">{error}</p>
         )}
       </div>
+
+      <ConfirmModal
+        open={syllabusToDelete !== null}
+        title="Delete syllabus?"
+        message="This cannot be undone. All modules, lessons, and progress for this syllabus will be permanently removed."
+        confirmLabel="Delete"
+        loading={deleting}
+        onConfirm={confirmDeleteSyllabus}
+        onCancel={() => {
+          if (!deleting) setSyllabusToDelete(null);
+        }}
+      />
     </main>
   );
 }

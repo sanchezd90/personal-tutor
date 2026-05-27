@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { ConfirmModal } from "@/components/ConfirmModal";
 
 type Subject = {
   id: string;
@@ -25,6 +26,8 @@ export default function SubjectPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [topicsDescription, setTopicsDescription] = useState("");
+  const [syllabusToDelete, setSyllabusToDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   async function fetchSubject(): Promise<Subject | null> {
     try {
@@ -56,18 +59,26 @@ export default function SubjectPage() {
     }
   }
 
-  async function deleteSyllabus(syllabusId: string, e: React.MouseEvent) {
+  function requestDeleteSyllabus(syllabusId: string, e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    if (!confirm("Delete this syllabus? This cannot be undone.")) return;
+    setSyllabusToDelete(syllabusId);
+  }
+
+  async function confirmDeleteSyllabus() {
+    if (!syllabusToDelete) return;
+    setDeleting(true);
     try {
-      const res = await fetch(`/api/syllabi/${syllabusId}`, {
+      const res = await fetch(`/api/syllabi/${syllabusToDelete}`, {
         method: "DELETE",
       });
       if (!res.ok) throw new Error("Failed to delete");
+      setSyllabusToDelete(null);
       await fetchSyllabi();
     } catch {
       setError("Failed to delete syllabus");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -164,7 +175,7 @@ export default function SubjectPage() {
                     {new Date(s.createdAt).toLocaleDateString()}
                   </Link>
                   <button
-                    onClick={(e) => deleteSyllabus(s.id, e)}
+                    onClick={(e) => requestDeleteSyllabus(s.id, e)}
                     className="px-3 py-2 rounded-lg text-red-400 hover:bg-red-900/30 opacity-0 group-hover:opacity-100 transition-opacity"
                     title="Delete syllabus"
                   >
@@ -210,6 +221,18 @@ export default function SubjectPage() {
           )}
         </div>
       </div>
+
+      <ConfirmModal
+        open={syllabusToDelete !== null}
+        title="Delete syllabus?"
+        message="This cannot be undone. All modules, lessons, and progress for this syllabus will be permanently removed."
+        confirmLabel="Delete"
+        loading={deleting}
+        onConfirm={confirmDeleteSyllabus}
+        onCancel={() => {
+          if (!deleting) setSyllabusToDelete(null);
+        }}
+      />
     </main>
   );
 }

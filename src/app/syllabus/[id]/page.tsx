@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import { SyllabusTree } from "@/components/SyllabusTree";
 import { QAHistoryPanel } from "@/components/QAHistoryPanel";
 
@@ -34,6 +35,7 @@ export default function SyllabusPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showQAHistory, setShowQAHistory] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
@@ -60,8 +62,7 @@ export default function SyllabusPage() {
     }
   }
 
-  async function handleDelete() {
-    if (!confirm("Delete this syllabus? This cannot be undone.")) return;
+  async function confirmDelete() {
     setDeleting(true);
     try {
       const res = await fetch(`/api/syllabi/${id}`, { method: "DELETE" });
@@ -69,6 +70,7 @@ export default function SyllabusPage() {
       router.push("/");
     } catch {
       setError("Failed to delete syllabus");
+      setShowDeleteConfirm(false);
     } finally {
       setDeleting(false);
     }
@@ -140,11 +142,11 @@ export default function SyllabusPage() {
                   {showQAHistory ? "Hide" : "Show"} Q&A History
                 </button>
                 <button
-                  onClick={handleDelete}
+                  onClick={() => setShowDeleteConfirm(true)}
                   disabled={deleting}
                   className="px-4 py-2 rounded-lg bg-red-900/50 hover:bg-red-800/50 text-red-300 text-sm disabled:opacity-50"
                 >
-                  {deleting ? "Deleting..." : "Delete"}
+                  Delete
                 </button>
               </div>
             </div>
@@ -160,6 +162,18 @@ export default function SyllabusPage() {
           </>
         )}
       </div>
+
+      <ConfirmModal
+        open={showDeleteConfirm}
+        title="Delete syllabus?"
+        message="This cannot be undone. All modules, lessons, and progress for this syllabus will be permanently removed."
+        confirmLabel="Delete"
+        loading={deleting}
+        onConfirm={confirmDelete}
+        onCancel={() => {
+          if (!deleting) setShowDeleteConfirm(false);
+        }}
+      />
     </main>
   );
 }
