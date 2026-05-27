@@ -10,7 +10,7 @@ type QAItem = {
 };
 
 type QASidebarProps = {
-  contentBlockId: string | null;
+  contentBlockId: string;
 };
 
 export function QASidebar({ contentBlockId }: QASidebarProps) {
@@ -20,10 +20,6 @@ export function QASidebar({ contentBlockId }: QASidebarProps) {
   const [loadingQA, setLoadingQA] = useState(false);
 
   useEffect(() => {
-    if (!contentBlockId) {
-      setItems([]);
-      return;
-    }
     setLoadingQA(true);
     fetch(`/api/content-blocks/${contentBlockId}/questions`)
       .then((res) => res.json())
@@ -62,18 +58,10 @@ export function QASidebar({ contentBlockId }: QASidebarProps) {
     }
   }
 
-  if (!contentBlockId) {
-    return (
-      <div className="w-80 flex-shrink-0 p-4 border-l border-slate-700 bg-slate-900/50">
-        <p className="text-slate-500 text-sm">Select a block to ask questions</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="w-80 flex-shrink-0 flex flex-col border-l border-slate-700 bg-slate-900/50">
-      <div className="p-4 border-b border-slate-700">
-        <h3 className="font-semibold text-slate-200">Q&A</h3>
+    <div className="border-t border-slate-700 bg-slate-900/30">
+      <div className="p-4">
+        <h3 className="font-semibold text-slate-200 text-sm">Q&A</h3>
         <form onSubmit={handleSubmit} className="mt-3">
           <textarea
             value={question}
@@ -92,7 +80,7 @@ export function QASidebar({ contentBlockId }: QASidebarProps) {
           </button>
         </form>
       </div>
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="px-4 pb-4 space-y-4">
         {loadingQA ? (
           <p className="text-slate-500 text-sm">Loading...</p>
         ) : items.length === 0 ? (

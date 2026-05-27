@@ -4,7 +4,6 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ContentBlock } from "@/components/ContentBlock";
-import { QASidebar } from "@/components/QASidebar";
 import {
   blockAnchorId,
   parseBlockIndexFromHash,
@@ -49,7 +48,6 @@ export default function LessonPage() {
     title?: string | null;
     content: string;
   } | null>(null);
-  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [togglingRead, setTogglingRead] = useState<string | null>(null);
 
@@ -72,20 +70,14 @@ export default function LessonPage() {
     fetchLesson();
   }, [fetchLesson]);
 
-  const scrollToBlock = useCallback(
-    (blockIndex: number, blockId?: string) => {
-      const anchor = blockAnchorId(blockIndex);
-      const element = document.getElementById(anchor);
-      if (element) {
-        element.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-      if (blockId) {
-        setSelectedBlockId(blockId);
-      }
-      window.history.replaceState(null, "", `#${anchor}`);
-    },
-    []
-  );
+  const scrollToBlock = useCallback((blockIndex: number) => {
+    const anchor = blockAnchorId(blockIndex);
+    const element = document.getElementById(anchor);
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    window.history.replaceState(null, "", `#${anchor}`);
+  }, []);
 
   useEffect(() => {
     if (!lesson || loading || generatingInitial) return;
@@ -100,7 +92,7 @@ export default function LessonPage() {
       if (!block) return;
 
       requestAnimationFrame(() => {
-        scrollToBlock(block.blockIndex, block.id);
+        scrollToBlock(block.blockIndex);
       });
     };
 
@@ -201,7 +193,6 @@ export default function LessonPage() {
     deliveredBlocks.length === lesson.blocks.length &&
     progressPct === 100;
   const totalOutlineBlocks = lesson?.blocks.length ?? 0;
-
   if (loading) {
     return (
       <main className="min-h-screen flex items-center justify-center p-8 bg-slate-950 text-slate-100">
@@ -237,9 +228,8 @@ export default function LessonPage() {
   }
 
   return (
-    <main className="min-h-screen flex bg-slate-950 text-slate-100">
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-2xl mx-auto p-8">
+    <main className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="max-w-2xl mx-auto p-8">
           <Link
             href={lesson.syllabusId ? `/syllabus/${lesson.syllabusId}` : "/"}
             className="text-slate-400 hover:text-slate-200 text-sm mb-6 inline-block"
@@ -290,7 +280,7 @@ export default function LessonPage() {
                           href={`#${blockAnchorId(block.blockIndex)}`}
                           onClick={(event) => {
                             event.preventDefault();
-                            scrollToBlock(block.blockIndex, block.id);
+                            scrollToBlock(block.blockIndex);
                           }}
                           className="text-emerald-400 hover:text-emerald-300 hover:underline"
                         >
@@ -312,23 +302,17 @@ export default function LessonPage() {
               id={blockAnchorId(block.blockIndex)}
               className="scroll-mt-8"
             >
-              <button
-                type="button"
-                onClick={() => setSelectedBlockId(block.id)}
-                className="w-full text-left cursor-pointer block"
-              >
-                <ContentBlock
-                  content={block.content}
-                  blockNumber={block.blockIndex + 1}
-                  title={block.title}
-                  blockId={block.id}
-                  auditPassed={block.auditPassed ?? null}
-                  read={block.read ?? false}
-                  onReadToggle={
-                    togglingRead === block.id ? undefined : handleReadToggle
-                  }
-                />
-              </button>
+              <ContentBlock
+                content={block.content}
+                blockNumber={block.blockIndex + 1}
+                title={block.title}
+                blockId={block.id}
+                auditPassed={block.auditPassed ?? null}
+                read={block.read ?? false}
+                onReadToggle={
+                  togglingRead === block.id ? undefined : handleReadToggle
+                }
+              />
             </div>
           ))}
 
@@ -362,10 +346,7 @@ export default function LessonPage() {
               </button>
             </div>
           )}
-        </div>
       </div>
-
-      <QASidebar contentBlockId={selectedBlockId} />
     </main>
   );
 }
