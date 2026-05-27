@@ -39,20 +39,6 @@ export function ContentBlock({
             <span className="text-slate-400 text-sm">Block {blockNumber}</span>
           </div>
           <div className="flex items-center gap-3">
-            {onReadToggle && (
-              <label
-                onClick={(e) => e.stopPropagation()}
-                className="flex items-center gap-2 cursor-pointer"
-              >
-                <input
-                  type="checkbox"
-                  checked={read}
-                  onChange={handleToggle}
-                  className="rounded border-slate-600 bg-slate-700 text-emerald-500 focus:ring-emerald-500"
-                />
-                <span className="text-slate-400 text-xs">Read</span>
-              </label>
-            )}
             {auditPassed === true && (
               <span className="text-emerald-400 text-xs">Verified</span>
             )}
@@ -64,6 +50,22 @@ export function ContentBlock({
         <div className="prose prose-invert prose-slate max-w-none prose-p:text-slate-300 prose-headings:text-slate-100">
           <ReactMarkdown>{content}</ReactMarkdown>
         </div>
+        {onReadToggle && (
+          <div className="flex justify-end mt-6 pt-4 border-t border-slate-700">
+            <label
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-2 cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                checked={read}
+                onChange={handleToggle}
+                className="rounded border-slate-600 bg-slate-700 text-emerald-500 focus:ring-emerald-500"
+              />
+              <span className="text-slate-400 text-xs">Read</span>
+            </label>
+          </div>
+        )}
       </div>
       <QASidebar contentBlockId={blockId} />
     </div>
