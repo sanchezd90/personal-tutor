@@ -29,7 +29,7 @@ export default function SubjectPage() {
   const [syllabusToDelete, setSyllabusToDelete] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  async function fetchSubject(): Promise<Subject | null> {
+  const fetchSubject = useCallback(async (): Promise<Subject | null> => {
     try {
       const res = await fetch("/api/subjects");
       if (!res.ok) throw new Error("Failed to fetch");
@@ -43,9 +43,9 @@ export default function SubjectPage() {
       setSubject(null);
       return null;
     }
-  }
+  }, [id]);
 
-  async function fetchSyllabi(): Promise<SyllabusSummary[]> {
+  const fetchSyllabi = useCallback(async (): Promise<SyllabusSummary[]> => {
     try {
       const res = await fetch("/api/syllabi");
       if (!res.ok) return [];
@@ -57,7 +57,7 @@ export default function SubjectPage() {
     } catch {
       return [];
     }
-  }
+  }, [id]);
 
   function requestDeleteSyllabus(syllabusId: string, e: React.MouseEvent) {
     e.preventDefault();
@@ -121,7 +121,7 @@ export default function SubjectPage() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, fetchSubject, fetchSyllabi]);
 
   if (loading) {
     return (

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import {
-  syllabi,
   modules,
   lessons,
   contentBlocks,

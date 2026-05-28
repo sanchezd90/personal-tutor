@@ -4,7 +4,6 @@ const {
   mockGetUser,
   mockCreateClient,
   mockWhere,
-  mockInnerJoin,
   mockFrom,
   mockSelect,
 } = vi.hoisted(() => {
@@ -38,7 +37,6 @@ const {
     mockGetUser,
     mockCreateClient,
     mockWhere,
-    mockInnerJoin,
     mockFrom,
     mockSelect,
   };

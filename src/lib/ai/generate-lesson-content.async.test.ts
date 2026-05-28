@@ -9,8 +9,6 @@ const {
   mockInsert,
   mockUpdate,
   mockOrderBy,
-  mockWhere,
-  mockFrom,
   mockSelect,
 } = vi.hoisted(() => {
   const mockGetLessonGenerationContext = vi.fn();
@@ -38,8 +36,6 @@ const {
     mockInsert,
     mockUpdate,
     mockOrderBy,
-    mockWhere,
-    mockFrom,
     mockSelect,
   };
 });

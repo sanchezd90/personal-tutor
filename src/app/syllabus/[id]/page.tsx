@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ConfirmModal } from "@/components/ConfirmModal";
@@ -38,11 +38,7 @@ export default function SyllabusPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  useEffect(() => {
-    fetchSyllabus();
-  }, [id]);
-
-  async function fetchSyllabus() {
+  const fetchSyllabus = useCallback(async () => {
     try {
       const res = await fetch(`/api/syllabi/${id}`);
       if (res.status === 404) {
@@ -60,7 +56,11 @@ export default function SyllabusPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [id]);
+
+  useEffect(() => {
+    fetchSyllabus();
+  }, [fetchSyllabus]);
 
   async function confirmDelete() {
     setDeleting(true);
