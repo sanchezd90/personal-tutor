@@ -31,20 +31,42 @@ npm install
 
 ### 2. Environment variables
 
-Copy `.env.example` to `.env.local` and fill in:
+Copy `.env.example` to `.env.local` and fill in the required values:
 
 ```bash
 cp .env.example .env.local
 ```
 
-Required variables:
+#### Required
 
-- `DATABASE_URL` — Supabase connection string (Transaction pooler from Project Settings → Database)
-- `OPENAI_API_KEY` — Your OpenAI API key
-- `NEXT_PUBLIC_SUPABASE_URL` — Supabase project URL (for Google Auth)
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Supabase anon key (or `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`)
+| Variable | Where to get it |
+|----------|-----------------|
+| `DATABASE_URL` | Supabase → Project Settings → Database → Connection string (URI, **Transaction pooler**) |
+| `OPENAI_API_KEY` | [OpenAI API keys](https://platform.openai.com/api-keys) — used by LangChain for syllabus, lessons, Q&A, and audit |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Project Settings → API → Project URL |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase → Project Settings → API → Publishable key (`sb_publishable_...`) |
 
-To enable Google sign-in: In Supabase Dashboard → Authentication → Providers, enable Google and add your Google OAuth Client ID and Secret from [Google Cloud Console](https://console.cloud.google.com/apis/credentials).
+Legacy Supabase projects can use `NEXT_PUBLIC_SUPABASE_ANON_KEY` instead of `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`; the app accepts either.
+
+Example `.env.local`:
+
+```bash
+# Supabase
+DATABASE_URL=postgresql://...
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+
+# OpenAI
+OPENAI_API_KEY=sk-...
+```
+
+#### Optional (not read by the app)
+
+`.env.example` also lists `SUPABASE_SECRET_KEY`, `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET`, `GOOGLE_CLIENT_ID`, and `GOOGLE_CLIENT_SECRET` for reference. This app does not read them — configure Google OAuth in the Supabase Dashboard instead.
+
+#### Google sign-in
+
+In Supabase Dashboard → Authentication → Providers, enable Google and add your OAuth Client ID and Secret from [Google Cloud Console](https://console.cloud.google.com/apis/credentials). Add `http://localhost:3000/auth/callback` (and your production URL) as authorized redirect URIs in both Google and Supabase.
 
 ### 3. Database
 
@@ -65,7 +87,11 @@ Open [http://localhost:3000](http://localhost:3000).
 ## Deployment (Vercel)
 
 1. Push to GitHub and connect the repo to Vercel
-2. Add environment variables in Vercel project settings
+2. Add these environment variables in Vercel project settings:
+   - `DATABASE_URL`
+   - `OPENAI_API_KEY`
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (or `NEXT_PUBLIC_SUPABASE_ANON_KEY`)
 3. Run `npm run db:push` manually (or add to build) before first deploy
 4. Deploy
 
