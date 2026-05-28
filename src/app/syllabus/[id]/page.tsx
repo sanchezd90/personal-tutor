@@ -120,31 +120,33 @@ export default function SyllabusPage() {
           </div>
         ) : (
           <>
-            <div className="flex items-center justify-between mb-8">
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold">Syllabus</h1>
-                {syllabus.isDone && (
-                  <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-sm font-medium">
-                    Done
-                  </span>
-                )}
-                <span className="text-slate-400 text-sm">
+            <div className="flex flex-col gap-4 mb-8 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <h1 className="text-2xl font-bold">Syllabus</h1>
+                  {syllabus.isDone && (
+                    <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-sm font-medium">
+                      Done
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 text-slate-400 text-sm">
                   {syllabus.progressPct ?? 0}% complete
                   {syllabus.totalLessons != null &&
                     ` (${syllabus.doneLessons ?? 0}/${syllabus.totalLessons} lessons)`}
-                </span>
+                </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:shrink-0">
                 <button
                   onClick={() => setShowQAHistory(!showQAHistory)}
-                  className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm"
+                  className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm whitespace-nowrap w-full sm:w-auto"
                 >
                   {showQAHistory ? "Hide" : "Show"} Q&A History
                 </button>
                 <button
                   onClick={() => setShowDeleteConfirm(true)}
                   disabled={deleting}
-                  className="px-4 py-2 rounded-lg bg-red-900/50 hover:bg-red-800/50 text-red-300 text-sm disabled:opacity-50"
+                  className="px-4 py-2 rounded-lg bg-red-900/50 hover:bg-red-800/50 text-red-300 text-sm disabled:opacity-50 whitespace-nowrap w-full sm:w-auto"
                 >
                   Delete
                 </button>

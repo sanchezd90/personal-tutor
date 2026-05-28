@@ -157,7 +157,7 @@ export default function Home() {
                       e.preventDefault();
                       setSyllabusToDelete(s.id);
                     }}
-                    className="px-3 py-2 rounded-lg text-red-400 hover:bg-red-900/30 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="px-3 py-2 rounded-lg text-red-400 hover:bg-red-900/30 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
                     title="Delete syllabus"
                   >
                     Delete

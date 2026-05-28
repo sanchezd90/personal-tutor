@@ -1,0 +1,53 @@
+---
+description: Require component tests when creating or modifying React components
+globs: src/components/**/*.tsx
+alwaysApply: false
+---
+
+# Component Tests Required
+
+When you **create or modify** any React component in `src/components/`, you **must** create or update its component test in the same change. Do not leave component work without matching test updates.
+
+## Test file location
+
+Colocate tests next to the component:
+
+```
+src/components/ConfirmModal.tsx      → src/components/ConfirmModal.test.tsx
+src/components/forms/LoginForm.tsx   → src/components/forms/LoginForm.test.tsx
+```
+
+## What to test
+
+Cover behavior affected by your change:
+
+1. **Critical user paths** — render, clicks, typing, form submit
+2. **Changed props/state** — new props, conditional UI, loading/error/empty states
+3. **Callbacks** — assert handlers are called with expected args
+4. **Accessibility** — focus, keyboard (Escape/Tab), ARIA on interactive components
+
+Test the **contract** (props in → UI/events out), not implementation details.
+
+## How to write tests
+
+Read and follow `.agents/skills/vitest-browser-component-testing/SKILL.md`.
+
+Stack for this project:
+
+```tsx
+import { render } from 'vitest-browser-react'
+import { page, userEvent } from 'vitest/browser'
+```
+
+Use `page.getByRole()` / `getByLabelText()` and `await expect.element(...)` for all DOM assertions.
+
+## Workflow (required)
+
+1. Identify the component file(s) you changed under `src/components/`.
+2. Create or update the colocated `.test.tsx` file.
+3. Add or adjust tests for every user-facing behavior you changed.
+4. Run `npm test -- --run <path-to-test>` and fix failures before finishing.
+
+## Exemptions
+
+Skip new tests only when the change is **purely** non-behavioral (e.g. comment-only or rename with no logic/UI change). Even then, update existing tests if names or imports break.
